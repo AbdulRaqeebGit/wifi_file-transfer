@@ -7,17 +7,17 @@ import LinkShare from './components/LinkShare';
 import FileList from './components/FileList';
 import QrModal from './components/QrModal';
 import PreviewModal from './components/PreviewModal';
-import { P2PManager } from './utils/p2p';
+import TransferProgressCard from './components/TransferProgressCard';
+import { FastP2PManager } from './utils/fastP2P';
 import { downloadAllAsZip } from './utils/zip';
-import { formatBytes } from './utils/formatters';
 import { sound } from './utils/sound';
-import { HardDrive, Smartphone, Zap, Radio, Globe } from 'lucide-react';
+import { Radio } from 'lucide-react';
 
 export default function App() {
   const [myCode, setMyCode] = useState('');
   const [remoteCode, setRemoteCode] = useState('');
   const [isConnected, setIsConnected] = useState(false);
-  const [activeTab, setActiveTab] = useState('files'); // 'files' | 'text' | 'links'
+  const [activeTab, setActiveTab] = useState('files');
 
   const [files, setFiles] = useState([]);
   const [textHistory, setTextHistory] = useState([]);
@@ -25,22 +25,24 @@ export default function App() {
 
   const [isQrOpen, setIsQrOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [activeTransfer, setActiveTransfer] = useState(null);
 
   const p2pRef = useRef(null);
 
-  // Initialize WebRTC P2P Manager
+  // Initialize Ultra-Fast P2P Manager
   useEffect(() => {
-    const p2p = new P2PManager({
+    const p2p = new FastP2PManager({
       onReady: ({ code }) => {
         setMyCode(code);
 
-        // Check if opened via QR code with #connect=XXXXXX
+        // Auto connect if opened via QR link #connect=XXXXXX
         const hash = window.location.hash;
         const match = hash.match(/#connect=([a-zA-Z0-9]+)/);
         if (match && match[1] && match[1] !== code) {
           setTimeout(() => {
             p2p.connectToPeer(match[1]);
-          }, 800);
+          }, 600);
         }
       },
       onConnected: ({ remoteCode }) => {
@@ -51,6 +53,8 @@ export default function App() {
       onDisconnected: () => {
         setIsConnected(false);
         setRemoteCode('');
+        setActiveTransfer(null);
+        setIsUploading(false);
       },
       onTextReceived: (textItem) => {
         sound.playSuccess();
@@ -62,13 +66,43 @@ export default function App() {
         setLinkHistory((prev) => [linkItem, ...prev]);
         setActiveTab('links');
       },
-      onFileReceived: (newFile) => {
+      onTransferStart: (info) => {
+        setActiveTransfer({
+          fileId: info.fileId,
+          fileName: info.fileName,
+          totalBytes: info.totalBytes,
+          receivedBytes: 0,
+          percent: 0,
+          speed: 0,
+          role: info.role,
+        });
+      },
+      onTransferProgress: (progress) => {
+        setActiveTransfer((prev) => ({
+          ...prev,
+          fileId: progress.fileId,
+          fileName: progress.fileName,
+          percent: progress.percent,
+          receivedBytes: progress.receivedBytes,
+          totalBytes: progress.totalBytes,
+          speed: progress.speed,
+          role: progress.role,
+        }));
+      },
+      onTransferComplete: (newFile) => {
         sound.playSuccess();
         setFiles((prev) => [newFile, ...prev]);
+        setActiveTransfer(null);
         setActiveTab('files');
       },
+      onTransferCancelled: ({ fileId, byRemote }) => {
+        sound.playClick();
+        setActiveTransfer(null);
+        setIsUploading(false);
+        alert(byRemote ? 'Transfer was cancelled by the other device.' : 'Transfer cancelled.');
+      },
       onError: (msg) => {
-        console.warn('P2P Alert:', msg);
+        console.warn('P2P Error:', msg);
       },
     });
 
@@ -91,9 +125,35 @@ export default function App() {
     }
   };
 
-  const handleSendFiles = async (file, onProgress) => {
+  const handleSendBatchFiles = async (filesToSend) => {
+    if (!p2pRef.current) return;
+    setIsUploading(true);
+
+    try {
+      for (const file of filesToSend) {
+        await p2pRef.current.sendFile(file, ({ percent, bytesSent, totalBytes, speed, fileId }) => {
+          setActiveTransfer({
+            fileId,
+            fileName: file.name,
+            percent,
+            receivedBytes: bytesSent,
+            totalBytes,
+            speed,
+            role: 'sender',
+          });
+        });
+      }
+    } finally {
+      setIsUploading(false);
+      setActiveTransfer(null);
+    }
+  };
+
+  const handleCancelTransfer = (fileId) => {
     if (p2pRef.current) {
-      await p2pRef.current.sendFile(file, onProgress);
+      p2pRef.current.cancelTransfer(fileId);
+      setActiveTransfer(null);
+      setIsUploading(false);
     }
   };
 
@@ -142,13 +202,10 @@ export default function App() {
     downloadAllAsZip(files);
   };
 
-  const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
-
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', width: '100%', overflowX: 'hidden' }}>
       {/* Top Navbar */}
       <Navbar
-        myCode={myCode}
         isConnected={isConnected}
         remoteCode={remoteCode}
         totalFiles={files.length}
@@ -157,44 +214,44 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main style={{ maxWidth: 1200, width: '100%', margin: '0 auto', padding: '24px 20px', flex: 1 }}>
+      <main style={{ maxWidth: 1100, width: '100%', margin: '0 auto', padding: '16px 14px', flex: 1, boxSizing: 'border-box' }}>
         {/* Simple Header */}
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            padding: '4px 14px',
+            padding: '4px 12px',
             borderRadius: 6,
             backgroundColor: '#fee2e2',
             border: '1px solid #fca5a5',
             color: '#BC0202',
-            fontSize: '0.8rem',
+            fontSize: '0.76rem',
             fontWeight: 700,
-            marginBottom: 10,
+            marginBottom: 8,
           }}>
-            <Radio size={14} color="#BC0202" />
-            <span>P2P WEBRTC DIRECT LOCAL & NETWORK TRANSFER</span>
+            <Radio size={13} color="#BC0202" />
+            <span>IDM-SPEED WEBRTC DIRECT P2P TRANSFER</span>
           </div>
 
           <h2 style={{
-            fontSize: 'clamp(1.7rem, 3.6vw, 2.4rem)',
+            fontSize: 'clamp(1.4rem, 3.2vw, 2.1rem)',
             fontWeight: 800,
             letterSpacing: '-0.5px',
-            margin: '0 0 8px',
+            margin: '0 0 6px',
             color: '#0f172a',
           }}>
             Transfer <span style={{ color: '#BC0202' }}>Files, Text & Links</span> Anywhere
           </h2>
 
           <p style={{
-            fontSize: '0.94rem',
+            fontSize: '0.88rem',
             color: '#64748b',
-            maxWidth: 620,
+            maxWidth: 580,
             margin: '0 auto',
-            lineHeight: 1.5,
+            lineHeight: 1.4,
           }}>
-            Works over Same Wi-Fi, Mobile Hotspot, or Mobile Data. Ready to host on GitHub Pages without any backend server!
+            Ultra-fast speed over Same Wi-Fi, Mobile Hotspot, or Mobile Data. Ready for GitHub Pages!
           </p>
         </div>
 
@@ -208,14 +265,17 @@ export default function App() {
           onOpenQr={() => setIsQrOpen(true)}
         />
 
-        {/* Mode Switcher Tabs (Files, Text, Links) */}
-        <div style={{
-          display: 'flex',
-          gap: 8,
-          marginBottom: 16,
-          borderBottom: '1px solid #e2e8f0',
-          paddingBottom: 8,
-        }}>
+        {/* Mode Switcher Tabs */}
+        <div
+          className="responsive-tabs"
+          style={{
+            display: 'flex',
+            gap: 6,
+            marginBottom: 14,
+            borderBottom: '1px solid #e2e8f0',
+            paddingBottom: 8,
+          }}
+        >
           <button
             onClick={() => setActiveTab('files')}
             style={{
@@ -223,23 +283,23 @@ export default function App() {
               color: activeTab === 'files' ? '#ffffff' : '#475569',
               border: activeTab === 'files' ? '1px solid #BC0202' : '1px solid #cbd5e1',
               borderRadius: 6,
-              padding: '8px 16px',
-              fontSize: '0.86rem',
+              padding: '7px 14px',
+              fontSize: '0.82rem',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 5,
             }}
           >
-            <span>📁 Files Transfer</span>
+            <span>📁 Files</span>
             {files.length > 0 && (
               <span style={{
                 backgroundColor: activeTab === 'files' ? '#ffffff' : '#fee2e2',
-                color: activeTab === 'files' ? '#BC0202' : '#BC0202',
-                padding: '1px 6px',
+                color: '#BC0202',
+                padding: '1px 5px',
                 borderRadius: 4,
-                fontSize: '0.72rem',
+                fontSize: '0.7rem',
               }}>
                 {files.length}
               </span>
@@ -253,23 +313,23 @@ export default function App() {
               color: activeTab === 'text' ? '#ffffff' : '#475569',
               border: activeTab === 'text' ? '1px solid #BC0202' : '1px solid #cbd5e1',
               borderRadius: 6,
-              padding: '8px 16px',
-              fontSize: '0.86rem',
+              padding: '7px 14px',
+              fontSize: '0.82rem',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 5,
             }}
           >
-            <span>💬 Send Text / Notes</span>
+            <span>💬 Text / Notes</span>
             {textHistory.length > 0 && (
               <span style={{
                 backgroundColor: activeTab === 'text' ? '#ffffff' : '#fee2e2',
-                color: activeTab === 'text' ? '#BC0202' : '#BC0202',
-                padding: '1px 6px',
+                color: '#BC0202',
+                padding: '1px 5px',
                 borderRadius: 4,
-                fontSize: '0.72rem',
+                fontSize: '0.7rem',
               }}>
                 {textHistory.length}
               </span>
@@ -283,23 +343,23 @@ export default function App() {
               color: activeTab === 'links' ? '#ffffff' : '#475569',
               border: activeTab === 'links' ? '1px solid #BC0202' : '1px solid #cbd5e1',
               borderRadius: 6,
-              padding: '8px 16px',
-              fontSize: '0.86rem',
+              padding: '7px 14px',
+              fontSize: '0.82rem',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 5,
             }}
           >
-            <span>🔗 Send Links / URLs</span>
+            <span>🔗 Links / URLs</span>
             {linkHistory.length > 0 && (
               <span style={{
                 backgroundColor: activeTab === 'links' ? '#ffffff' : '#fee2e2',
-                color: activeTab === 'links' ? '#BC0202' : '#BC0202',
-                padding: '1px 6px',
+                color: '#BC0202',
+                padding: '1px 5px',
                 borderRadius: 4,
-                fontSize: '0.72rem',
+                fontSize: '0.7rem',
               }}>
                 {linkHistory.length}
               </span>
@@ -312,7 +372,9 @@ export default function App() {
           <>
             <Dropzone
               isConnected={isConnected}
-              onSendFiles={handleSendFiles}
+              onSendFiles={handleSendBatchFiles}
+              isUploading={isUploading}
+              onCancelActiveTransfer={() => handleCancelTransfer(activeTransfer?.fileId)}
             />
 
             <FileList
@@ -344,23 +406,29 @@ export default function App() {
         )}
       </main>
 
+      {/* Floating Transfer Progress Card with prominent Cancel (X) button */}
+      <TransferProgressCard
+        activeTransfer={activeTransfer}
+        onCancel={handleCancelTransfer}
+      />
+
       {/* Clean Footer */}
       <footer style={{
         marginTop: 'auto',
         borderTop: '1px solid #e2e8f0',
-        padding: '20px',
+        padding: '16px',
         textAlign: 'center',
         backgroundColor: '#ffffff',
-        fontSize: '0.82rem',
+        fontSize: '0.78rem',
         color: '#64748b',
       }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontWeight: 800, color: '#BC0202' }}>AR | WiFi | TR</span>
-            <span>• GitHub Pages Ready & P2P Direct WebRTC Transfer</span>
+            <span>• Ultra-Fast P2P Direct WebRTC Transfer</span>
           </div>
           <div>
-            <span>No Server Required • Direct Device-to-Device Encrypted DataChannel</span>
+            <span>Direct Device-to-Device Encrypted DataChannel</span>
           </div>
         </div>
       </footer>

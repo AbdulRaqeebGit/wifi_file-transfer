@@ -1,9 +1,8 @@
 import React from 'react';
-import { Wifi, QrCode, Download, Volume2, VolumeX, Smartphone } from 'lucide-react';
+import { Wifi, QrCode, Download, Volume2, VolumeX } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function Navbar({
-  myCode,
   isConnected,
   remoteCode,
   totalFiles,
@@ -26,30 +25,34 @@ export default function Navbar({
       backgroundColor: '#ffffff',
       borderBottom: '1px solid #e2e8f0',
       boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-      padding: '14px 24px',
+      padding: '12px 16px',
     }}>
-      <div style={{
-        maxWidth: 1200,
-        margin: '0 auto',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 16,
-      }}>
+      <div
+        className="responsive-header"
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
         {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             position: 'relative',
-            width: 42,
-            height: 42,
-            borderRadius: 10,
+            width: 38,
+            height: 38,
+            borderRadius: 8,
             backgroundColor: '#BC0202',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            flexShrink: 0,
           }}>
-            <Wifi size={22} color="#ffffff" />
+            <Wifi size={20} color="#ffffff" />
             <div style={{
               position: 'absolute',
               top: -2,
@@ -63,52 +66,56 @@ export default function Navbar({
           </div>
 
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <h1 style={{
-                fontSize: '1.35rem',
+                fontSize: '1.2rem',
                 fontWeight: 800,
-                letterSpacing: '1px',
+                letterSpacing: '0.5px',
                 fontFamily: 'var(--font-sans)',
                 color: '#BC0202',
                 margin: 0,
+                lineHeight: 1.1,
               }}>
                 AR | WiFi | TR
               </h1>
               <span style={{
                 backgroundColor: isConnected ? '#dcfce7' : '#fee2e2',
                 color: isConnected ? '#166534' : '#BC0202',
-                fontSize: '0.68rem',
+                fontSize: '0.65rem',
                 fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 6,
+                padding: '1px 6px',
+                borderRadius: 4,
                 letterSpacing: '0.5px',
                 textTransform: 'uppercase',
               }}>
-                {isConnected ? `Connected: ${remoteCode}` : 'WebRTC P2P'}
+                {isConnected ? `ID: ${remoteCode}` : 'WebRTC P2P'}
               </span>
             </div>
             <p style={{
-              fontSize: '0.78rem',
+              fontSize: '0.74rem',
               color: 'var(--text-muted)',
               margin: '2px 0 0',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 5,
             }}>
               <span style={{
-                width: 7,
-                height: 7,
+                width: 6,
+                height: 6,
                 borderRadius: '50%',
                 backgroundColor: isConnected ? '#16a34a' : '#f59e0b',
                 display: 'inline-block',
               }} />
-              {isConnected ? 'Device Paired & Ready' : 'WiFi / Hotspot / Data Direct Transfer'}
+              {isConnected ? 'Device Paired' : 'Hotspot / WiFi / Data Transfer'}
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div
+          className="responsive-header-actions"
+          style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+        >
           {/* QR Code button */}
           <button
             onClick={() => {
@@ -117,11 +124,11 @@ export default function Navbar({
             }}
             className="btn-secondary"
             style={{
-              padding: '8px 14px',
-              fontSize: '0.84rem',
+              padding: '7px 12px',
+              fontSize: '0.8rem',
             }}
           >
-            <QrCode size={16} color="#BC0202" />
+            <QrCode size={15} color="#BC0202" />
             <span>Connect Phone</span>
           </button>
 
@@ -134,23 +141,23 @@ export default function Navbar({
             disabled={totalFiles === 0}
             className="btn-primary"
             style={{
-              padding: '8px 18px',
-              fontSize: '0.86rem',
+              padding: '7px 14px',
+              fontSize: '0.8rem',
             }}
-            title={totalFiles === 0 ? 'No files to download' : 'Download all received files as a ZIP archive'}
+            title={totalFiles === 0 ? 'No files to download' : 'Download all files'}
           >
-            <Download size={15} />
-            <span>Download All ({totalFiles})</span>
+            <Download size={14} />
+            <span>ZIP All ({totalFiles})</span>
           </button>
 
           {/* Audio toggle button */}
           <button
             onClick={toggleSound}
             className="btn-secondary"
-            style={{ padding: '8px 10px', borderRadius: 8 }}
-            title={soundEnabled ? 'Mute sound effects' : 'Unmute sound effects'}
+            style={{ padding: '7px 9px', borderRadius: 6 }}
+            title={soundEnabled ? 'Mute sound' : 'Unmute sound'}
           >
-            {soundEnabled ? <Volume2 size={16} color="#BC0202" /> : <VolumeX size={16} color="var(--text-dim)" />}
+            {soundEnabled ? <Volume2 size={15} color="#BC0202" /> : <VolumeX size={15} color="var(--text-dim)" />}
           </button>
         </div>
       </div>
