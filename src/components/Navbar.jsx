@@ -1,11 +1,13 @@
 import React from 'react';
-import { Wifi, QrCode, Download, Volume2, VolumeX } from 'lucide-react';
+import { Wifi, QrCode, Download, Volume2, VolumeX, ShieldCheck } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function Navbar({
-  isConnected,
-  remoteCode,
-  totalFiles,
+  transferMode = 'wifi',
+  isServerOnline = true,
+  isConnected = false,
+  remoteCode = '',
+  totalFiles = 0,
   onOpenQr,
   onDownloadAll,
 }) {
@@ -16,6 +18,8 @@ export default function Navbar({
     setSoundEnabled(!soundEnabled);
     if (!soundEnabled) sound.playClick();
   };
+
+  const isOnline = transferMode === 'wifi' ? isServerOnline : isConnected;
 
   return (
     <header style={{
@@ -60,7 +64,7 @@ export default function Navbar({
               width: 8,
               height: 8,
               borderRadius: '50%',
-              backgroundColor: isConnected ? '#22c55e' : '#FF0000',
+              backgroundColor: isOnline ? '#22c55e' : '#FF0000',
               border: '2px solid #ffffff',
             }} />
           </div>
@@ -79,8 +83,8 @@ export default function Navbar({
                 AR | WiFi | TR
               </h1>
               <span style={{
-                backgroundColor: isConnected ? '#dcfce7' : '#fee2e2',
-                color: isConnected ? '#166534' : '#BC0202',
+                backgroundColor: isOnline ? '#dcfce7' : '#fee2e2',
+                color: isOnline ? '#166534' : '#BC0202',
                 fontSize: '0.65rem',
                 fontWeight: 700,
                 padding: '1px 6px',
@@ -88,7 +92,13 @@ export default function Navbar({
                 letterSpacing: '0.5px',
                 textTransform: 'uppercase',
               }}>
-                {isConnected ? `ID: ${remoteCode}` : 'WebRTC P2P'}
+                {transferMode === 'wifi'
+                  ? isServerOnline
+                    ? 'Same WiFi Hub'
+                    : 'WiFi Offline'
+                  : isConnected
+                  ? `Paired: ${remoteCode}`
+                  : 'WebRTC P2P'}
               </span>
             </div>
             <p style={{
@@ -103,10 +113,14 @@ export default function Navbar({
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                backgroundColor: isConnected ? '#16a34a' : '#f59e0b',
+                backgroundColor: isOnline ? '#16a34a' : '#f59e0b',
                 display: 'inline-block',
               }} />
-              {isConnected ? 'Device Paired' : 'Hotspot / WiFi / Data Transfer'}
+              {transferMode === 'wifi'
+                ? 'Local WiFi Network • No Code Required'
+                : isConnected
+                ? `Paired with ${remoteCode}`
+                : 'Direct P2P • Enter 6-Digit Code'}
             </p>
           </div>
         </div>

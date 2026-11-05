@@ -1,9 +1,11 @@
 import { Peer } from 'peerjs';
 
-// Safe chunk size for WebRTC SCTP (strictly under 64 KiB)
-const CHUNK_SIZE = 60 * 1024; // 61,440 bytes (safely under 65,535 bytes)
-const BLOCK_SIZE = 4 * 1024 * 1024; // 4 MB read block (memory safe for 5GB+ files)
-const BUFFER_HIGH = 4 * 1024 * 1024; // 4 MB backpressure threshold
+// ── Transfer constants ──────────────────────────────────────────────────────
+// SCTP hard-limit is 65 535 bytes; stay safely under with 60 KB chunks.
+const CHUNK_SIZE = 60 * 1024;         // 61 440 bytes per WebRTC message
+const BLOCK_SIZE = 8 * 1024 * 1024;  // 8 MB read-slice (keeps CPU busy, safe RAM)
+const BUFFER_HIGH = 8 * 1024 * 1024; // pause sending above 8 MB bufferedAmount
+const BUFFER_LOW  = 1 * 1024 * 1024; // resume when bufferedAmount drops below 1 MB
 
 export class P2PManager {
   constructor(callbacks = {}) {
@@ -12,6 +14,7 @@ export class P2PManager {
     this.myCode = '';
     this.peerId = '';
     this.activeTransfer = null;
+    this.receivingFile = null;
 
     this.callbacks = {
       onReady: () => {},
@@ -28,10 +31,10 @@ export class P2PManager {
       ...callbacks,
     };
 
-    this.receivingFile = null;
     this.initPeer();
   }
 
+  // ── Peer initialisation ────────────────────────────────────────────────────
   generateCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
@@ -41,14 +44,12 @@ export class P2PManager {
     this.peerId = `arw-${this.myCode}`;
 
     this.peer = new Peer(this.peerId, {
-      debug: 1,
+      debug: 0,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
           { urls: 'stun:stun.cloudflare.com:3478' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
         ],
       },
     });
@@ -57,16 +58,15 @@ export class P2PManager {
       this.callbacks.onReady({ fullPeerId: id, code: this.myCode });
     });
 
-    // When someone connects to ME
     this.peer.on('connection', (conn) => {
       this.setupConnection(conn);
     });
 
     this.peer.on('error', (err) => {
-      console.warn('Peer error:', err);
+      console.warn('Peer error:', err.type, err.message);
       if (err.type === 'unavailable-id') {
-        this.myCode = this.generateCode();
         this.peer?.destroy();
+        this.myCode = this.generateCode();
         this.initPeer();
       } else {
         this.callbacks.onError(err.message || 'Connection error');
@@ -74,47 +74,42 @@ export class P2PManager {
     });
 
     this.peer.on('disconnected', () => {
-      // Reconnect to signaling server if disconnected
-      if (this.peer && !this.peer.destroyed) {
-        this.peer.reconnect();
-      }
+      if (this.peer && !this.peer.destroyed) this.peer.reconnect();
     });
   }
 
+  // ── Outgoing connection ────────────────────────────────────────────────────
   connectToPeer(targetCode) {
     if (!this.peer || !this.peer.open) {
-      this.callbacks.onError('Peer not ready yet. Please wait a second.');
+      this.callbacks.onError('Peer not ready yet. Please wait a moment.');
       return;
     }
-
     const clean = targetCode.trim().replace(/^arw-/, '');
     if (clean === this.myCode) {
       this.callbacks.onError('Cannot connect to your own code!');
       return;
     }
-
-    const targetPeerId = `arw-${clean}`;
     this.callbacks.onConnecting({ remoteCode: clean });
-
-    const conn = this.peer.connect(targetPeerId, {
-      reliable: true,
-    });
-
+    const conn = this.peer.connect(`arw-${clean}`, { reliable: true });
     this.setupConnection(conn);
   }
 
+  // ── Shared connection wiring ───────────────────────────────────────────────
   setupConnection(conn) {
-    if (this.conn && this.conn.open) {
-      try {
-        this.conn.close();
-      } catch {}
+    if (this.conn?.open) {
+      try { this.conn.close(); } catch {}
     }
-
     this.conn = conn;
 
+    // Set bufferedAmountLowThreshold on the underlying RTCDataChannel
     conn.on('open', () => {
       const remoteCode = conn.peer.replace(/^arw-/, '');
       this.callbacks.onConnected({ remotePeerId: conn.peer, remoteCode });
+
+      // Tune the native DataChannel for maximum throughput
+      if (conn.dataChannel) {
+        conn.dataChannel.bufferedAmountLowThreshold = BUFFER_LOW;
+      }
     });
 
     conn.on('data', async (data) => {
@@ -129,26 +124,29 @@ export class P2PManager {
     });
 
     conn.on('error', (err) => {
-      console.error('Data connection error:', err);
+      console.error('DataChannel error:', err);
       this.callbacks.onError('Connection error with peer');
     });
   }
 
+  // ── Incoming data handler ──────────────────────────────────────────────────
   async handleIncomingData(data) {
     if (!data) return;
 
+    // ── text ──
     if (data.type === 'text') {
       this.callbacks.onTextReceived({
-        id: Date.now() + Math.random().toString(),
+        id: `${Date.now()}-${Math.random()}`,
         text: data.text,
         timestamp: data.timestamp || new Date().toISOString(),
       });
       return;
     }
 
+    // ── link ──
     if (data.type === 'link') {
       this.callbacks.onLinkReceived({
-        id: Date.now() + Math.random().toString(),
+        id: `${Date.now()}-${Math.random()}`,
         url: data.url,
         title: data.title || data.url,
         timestamp: data.timestamp || new Date().toISOString(),
@@ -156,28 +154,19 @@ export class P2PManager {
       return;
     }
 
+    // ── cancel ──
     if (data.type === 'file-cancel') {
-      if (this.receivingFile && this.receivingFile.id === data.id) {
-        this.receivingFile = null;
-      }
+      if (this.receivingFile?.id === data.id) this.receivingFile = null;
       this.activeTransfer = null;
       this.callbacks.onTransferCancelled({ fileId: data.id, byRemote: true });
       return;
     }
 
+    // ── file-start ──
     if (data.type === 'file-start') {
-      let writableStream = null;
-
-      // Direct disk streaming for 1.5GB+ files if showSaveFilePicker supported
-      if (data.size > 1.5 * 1024 * 1024 * 1024 && typeof window.showSaveFilePicker === 'function') {
-        try {
-          const handle = await window.showSaveFilePicker({ suggestedName: data.name });
-          writableStream = await handle.createWritable();
-        } catch {
-          // user cancelled picker or fallback
-        }
-      }
-
+      // NOTE: We intentionally do NOT use showSaveFilePicker here.
+      // All files are buffered in memory as blobs so the user can
+      // manually click "Download" whenever they want. No auto-save.
       this.receivingFile = {
         id: data.id,
         name: data.name,
@@ -185,11 +174,11 @@ export class P2PManager {
         mimeType: data.mimeType,
         chunksTotal: data.chunksTotal,
         chunksReceived: 0,
+        // Rolling 50 MB blob segments to keep RAM bounded for large files
         blobSegments: [],
         currentSegment: [],
         currentSegmentBytes: 0,
         receivedBytes: 0,
-        writableStream,
         startTime: Date.now(),
       };
 
@@ -212,34 +201,31 @@ export class P2PManager {
       return;
     }
 
+    // ── file-chunk ──
     if (data.type === 'file-chunk') {
       const rf = this.receivingFile;
       if (!rf || rf.id !== data.id) return;
 
-      const chunkBuffer = data.chunk;
-      const byteLen = chunkBuffer.byteLength || chunkBuffer.length || 0;
+      const buf = data.chunk;
+      const byteLen = buf.byteLength ?? buf.length ?? 0;
+
       rf.receivedBytes += byteLen;
       rf.chunksReceived++;
 
-      if (rf.writableStream) {
-        try {
-          await rf.writableStream.write(chunkBuffer);
-        } catch {}
-      } else {
-        rf.currentSegment.push(chunkBuffer);
-        rf.currentSegmentBytes += byteLen;
+      // Accumulate into current 50 MB segment
+      rf.currentSegment.push(buf);
+      rf.currentSegmentBytes += byteLen;
 
-        // Consolidate into 50MB blobs to keep memory strictly optimized
-        if (rf.currentSegmentBytes >= 50 * 1024 * 1024) {
-          rf.blobSegments.push(new Blob(rf.currentSegment, { type: rf.mimeType }));
-          rf.currentSegment = [];
-          rf.currentSegmentBytes = 0;
-        }
+      if (rf.currentSegmentBytes >= 50 * 1024 * 1024) {
+        rf.blobSegments.push(new Blob(rf.currentSegment, { type: rf.mimeType }));
+        rf.currentSegment = [];
+        rf.currentSegmentBytes = 0;
       }
 
+      // Progress
       const percent = rf.size > 0 ? Math.min(100, Math.round((rf.receivedBytes / rf.size) * 100)) : 0;
       const elapsedSec = (Date.now() - rf.startTime) / 1000;
-      const speed = elapsedSec > 0.2 ? rf.receivedBytes / elapsedSec : 0;
+      const speed = elapsedSec > 0.1 ? rf.receivedBytes / elapsedSec : 0;
 
       this.callbacks.onTransferProgress({
         fileId: rf.id,
@@ -251,36 +237,35 @@ export class P2PManager {
         speed,
       });
 
-      if (rf.receivedBytes >= rf.size || rf.chunksReceived >= rf.chunksTotal) {
-        if (rf.writableStream) {
-          try {
-            await rf.writableStream.close();
-          } catch {}
+      // ── Transfer complete ──
+      const done = rf.receivedBytes >= rf.size || rf.chunksReceived >= rf.chunksTotal;
+      if (done) {
+        // Flush remaining segment
+        if (rf.currentSegment.length > 0) {
+          rf.blobSegments.push(new Blob(rf.currentSegment, { type: rf.mimeType }));
         }
 
-        let blob = null;
-        let url = null;
+        const blob = new Blob(rf.blobSegments, {
+          type: rf.mimeType || 'application/octet-stream',
+        });
 
-        if (rf.blobSegments.length > 0 || rf.currentSegment.length > 0) {
-          if (rf.currentSegment.length > 0) {
-            rf.blobSegments.push(new Blob(rf.currentSegment, { type: rf.mimeType }));
-          }
-          blob = new Blob(rf.blobSegments, { type: rf.mimeType || 'application/octet-stream' });
-          url = URL.createObjectURL(blob);
-        }
+        // Create a stable object URL for preview and download
+        const url = URL.createObjectURL(blob);
 
         const completedFile = {
           id: rf.id,
           name: rf.name,
           size: rf.size,
           mimeType: rf.mimeType,
-          blob,
-          url,
+          blob,       // kept for ZIP-all utility
+          url,        // blob URL — user clicks Download to save
           uploadedAt: new Date().toISOString(),
           downloads: 0,
-          savedDirectlyToDisk: !!rf.writableStream,
+          savedDirectlyToDisk: false,
         };
 
+        // ⚠️ No auto-download here — just fire the callback so the UI
+        //    can display the file card with a manual "Download" button.
         this.callbacks.onTransferComplete(completedFile);
         this.receivingFile = null;
         this.activeTransfer = null;
@@ -288,54 +273,38 @@ export class P2PManager {
     }
   }
 
+  // ── Cancel ────────────────────────────────────────────────────────────────
   cancelTransfer(fileId) {
-    if (this.activeTransfer) {
-      this.activeTransfer.aborted = true;
+    if (this.activeTransfer) this.activeTransfer.aborted = true;
+
+    if (this.conn?.open) {
+      try { this.conn.send({ type: 'file-cancel', id: fileId }); } catch {}
     }
 
-    if (this.conn && this.conn.open) {
-      try {
-        this.conn.send({ type: 'file-cancel', id: fileId });
-      } catch {}
-    }
-
-    if (this.receivingFile) {
-      if (this.receivingFile.writableStream) {
-        try {
-          this.receivingFile.writableStream.abort();
-        } catch {}
-      }
-      this.receivingFile = null;
-    }
-
-    const cancelledId = fileId || (this.activeTransfer && this.activeTransfer.fileId);
+    this.receivingFile = null;
     this.activeTransfer = null;
-    this.callbacks.onTransferCancelled({ fileId: cancelledId, byRemote: false });
+    this.callbacks.onTransferCancelled({
+      fileId: fileId || null,
+      byRemote: false,
+    });
   }
 
+  // ── Text / Link senders ───────────────────────────────────────────────────
   sendText(text) {
-    if (!this.conn || !this.conn.open) throw new Error('Not connected to any peer');
-    this.conn.send({
-      type: 'text',
-      text,
-      timestamp: new Date().toISOString(),
-    });
+    if (!this.conn?.open) throw new Error('Not connected to any peer');
+    this.conn.send({ type: 'text', text, timestamp: new Date().toISOString() });
   }
 
   sendLink(url, title = '') {
-    if (!this.conn || !this.conn.open) throw new Error('Not connected to any peer');
-    this.conn.send({
-      type: 'link',
-      url,
-      title: title || url,
-      timestamp: new Date().toISOString(),
-    });
+    if (!this.conn?.open) throw new Error('Not connected to any peer');
+    this.conn.send({ type: 'link', url, title: title || url, timestamp: new Date().toISOString() });
   }
 
+  // ── File sender (ultra-fast pipeline) ────────────────────────────────────
   async sendFile(file, onProgress) {
-    if (!this.conn || !this.conn.open) throw new Error('Not connected to any peer');
+    if (!this.conn?.open) throw new Error('Not connected to any peer');
 
-    const fileId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const fileId = `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
     const fileSize = file.size;
     const chunksTotal = Math.ceil(fileSize / CHUNK_SIZE);
 
@@ -355,7 +324,7 @@ export class P2PManager {
       role: 'sender',
     });
 
-    // Send header
+    // Send metadata header
     this.conn.send({
       type: 'file-start',
       id: fileId,
@@ -369,22 +338,19 @@ export class P2PManager {
     let bytesSent = 0;
     const startTime = Date.now();
 
-    // Read in 4MB memory blocks
+    // ── Pipelined sending: read 8 MB blocks, send 60 KB chunks ──────────────
     for (let blockOffset = 0; blockOffset < fileSize; blockOffset += BLOCK_SIZE) {
       if (transferState.aborted) throw new Error('Transfer cancelled');
 
       const blockEnd = Math.min(fileSize, blockOffset + BLOCK_SIZE);
-      const blockSlice = file.slice(blockOffset, blockEnd);
-      const blockBuffer = await blockSlice.arrayBuffer();
+      const blockBuffer = await file.slice(blockOffset, blockEnd).arrayBuffer();
 
-      // Chunk the 4MB block into 60KB safe chunks
       for (let chunkOffset = 0; chunkOffset < blockBuffer.byteLength; chunkOffset += CHUNK_SIZE) {
         if (transferState.aborted) throw new Error('Transfer cancelled');
 
-        const chunkEnd = Math.min(blockBuffer.byteLength, chunkOffset + CHUNK_SIZE);
-        const chunk = blockBuffer.slice(chunkOffset, chunkEnd);
+        const chunk = blockBuffer.slice(chunkOffset, Math.min(blockBuffer.byteLength, chunkOffset + CHUNK_SIZE));
 
-        // Native WebRTC backpressure check
+        // ── Backpressure: pause when buffer fills ────────────────────────────
         if (dc && dc.bufferedAmount > BUFFER_HIGH) {
           await new Promise((resolve) => {
             const onLow = () => {
@@ -392,24 +358,20 @@ export class P2PManager {
               resolve();
             };
             dc.addEventListener('bufferedamountlow', onLow);
+            // Safety timeout so we never hang forever
             setTimeout(() => {
               dc.removeEventListener('bufferedamountlow', onLow);
               resolve();
-            }, 200);
+            }, 500);
           });
         }
 
-        this.conn.send({
-          type: 'file-chunk',
-          id: fileId,
-          chunk,
-        });
-
+        this.conn.send({ type: 'file-chunk', id: fileId, chunk });
         bytesSent += chunk.byteLength;
 
         const percent = fileSize > 0 ? Math.min(100, Math.round((bytesSent / fileSize) * 100)) : 0;
         const elapsedSec = (Date.now() - startTime) / 1000;
-        const speed = elapsedSec > 0.2 ? bytesSent / elapsedSec : 0;
+        const speed = elapsedSec > 0.1 ? bytesSent / elapsedSec : 0;
 
         if (onProgress) {
           onProgress({ percent, bytesSent, totalBytes: fileSize, speed, fileId });
@@ -430,11 +392,10 @@ export class P2PManager {
     this.activeTransfer = null;
   }
 
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
   disconnect() {
     if (this.conn) {
-      try {
-        this.conn.close();
-      } catch {}
+      try { this.conn.close(); } catch {}
       this.conn = null;
     }
     this.activeTransfer = null;
@@ -444,9 +405,7 @@ export class P2PManager {
   destroy() {
     this.disconnect();
     if (this.peer) {
-      try {
-        this.peer.destroy();
-      } catch {}
+      try { this.peer.destroy(); } catch {}
       this.peer = null;
     }
   }

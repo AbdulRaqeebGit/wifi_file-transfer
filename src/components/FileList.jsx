@@ -70,8 +70,20 @@ export default function FileList({
 
   const handleDownload = (file) => {
     sound.playClick();
-    const downloadUrl = file.url || (file.blob ? URL.createObjectURL(file.blob) : null);
-    if (!downloadUrl) return;
+
+    // Priority:
+    // 1. Explicit file.url (blob URL or full server URL)
+    // 2. Blob if in-memory
+    // 3. Server download route /api/download/:id
+    const downloadUrl =
+      file.url ||
+      (file.blob ? URL.createObjectURL(file.blob) : null) ||
+      (file.id ? `/api/download/${file.id}` : null);
+
+    if (!downloadUrl) {
+      alert('File download is not available. Please re-transfer the file.');
+      return;
+    }
 
     const a = document.createElement('a');
     a.href = downloadUrl;

@@ -3,17 +3,26 @@ import { X, Copy, Check, Wifi } from 'lucide-react';
 import QRCode from 'qrcode';
 import { sound } from '../utils/sound';
 
-export default function QrModal({ isOpen, onClose, myCode }) {
+export default function QrModal({
+  isOpen,
+  onClose,
+  myCode,
+  targetUrl,
+  title = 'Scan to Connect Phone',
+  subtext = 'Open your phone camera to scan. Instantly open this web app on mobile without setup!',
+}) {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
 
-  const pairingUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}#connect=${myCode || ''}`
-    : '';
+  const activeUrl =
+    targetUrl ||
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}#connect=${myCode || ''}`
+      : '');
 
   useEffect(() => {
-    if (isOpen && myCode) {
-      QRCode.toDataURL(pairingUrl, {
+    if (isOpen && activeUrl) {
+      QRCode.toDataURL(activeUrl, {
         margin: 2,
         scale: 7,
         color: {
@@ -24,13 +33,13 @@ export default function QrModal({ isOpen, onClose, myCode }) {
         .then((url) => setQrDataUrl(url))
         .catch((err) => console.error('QR error:', err));
     }
-  }, [isOpen, myCode, pairingUrl]);
+  }, [isOpen, activeUrl]);
 
   if (!isOpen) return null;
 
   const handleCopy = () => {
-    if (pairingUrl) {
-      navigator.clipboard.writeText(pairingUrl);
+    if (activeUrl) {
+      navigator.clipboard.writeText(activeUrl);
       setCopied(true);
       sound.playClick();
       setTimeout(() => setCopied(false), 2000);
@@ -55,7 +64,7 @@ export default function QrModal({ isOpen, onClose, myCode }) {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: 400,
+          maxWidth: 420,
           backgroundColor: '#ffffff',
           border: '1px solid #e2e8f0',
           borderRadius: 16,
@@ -105,10 +114,10 @@ export default function QrModal({ isOpen, onClose, myCode }) {
         </div>
 
         <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
-          Scan to Connect Phone
+          {title}
         </h3>
         <p style={{ fontSize: '0.84rem', color: '#64748b', marginBottom: 18 }}>
-          Open your phone camera to scan. It connects directly via P2P without any setup!
+          {subtext}
         </p>
 
         {/* QR Code Graphic Frame */}
@@ -139,7 +148,7 @@ export default function QrModal({ isOpen, onClose, myCode }) {
           )}
         </div>
 
-        {/* Device Code Pill */}
+        {/* URL / Code Pill */}
         <div style={{
           backgroundColor: '#f8fafc',
           border: '1px solid #e2e8f0',
@@ -152,8 +161,16 @@ export default function QrModal({ isOpen, onClose, myCode }) {
           fontFamily: 'var(--font-mono)',
           fontSize: '0.84rem',
         }}>
-          <span style={{ color: '#BC0202', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 700 }}>
-            Device Code: {myCode}
+          <span style={{
+            color: '#BC0202',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontWeight: 700,
+            maxWidth: 220,
+            textAlign: 'left',
+          }}>
+            {activeUrl}
           </span>
           <button
             onClick={handleCopy}
@@ -162,16 +179,17 @@ export default function QrModal({ isOpen, onClose, myCode }) {
               padding: '6px 12px',
               fontSize: '0.76rem',
               borderRadius: 6,
+              flexShrink: 0,
             }}
           >
             {copied ? <Check size={13} color="#ffffff" /> : <Copy size={13} />}
-            <span>{copied ? 'Copied' : 'Copy Link'}</span>
+            <span>{copied ? 'Copied' : 'Copy'}</span>
           </button>
         </div>
 
         {/* Footer instruction */}
         <p style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: 12 }}>
-          Works over Hotspot, Wi-Fi, or Mobile Data. Ready for GitHub Pages!
+          {myCode ? `P2P Pair Code: ${myCode}` : 'Same WiFi Network • No Code Required'}
         </p>
       </div>
     </div>

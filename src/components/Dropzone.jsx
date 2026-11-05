@@ -1,9 +1,15 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { UploadCloud, File, X, CheckCircle, AlertTriangle, ArrowUp, Zap, Sparkles } from 'lucide-react';
+import { UploadCloud, File, X, CheckCircle, AlertTriangle, ArrowUp, Zap, Sparkles, Wifi } from 'lucide-react';
 import { formatBytes } from '../utils/formatters';
 import { sound } from '../utils/sound';
 
-export default function Dropzone({ isConnected, onSendFiles, isUploading, onCancelActiveTransfer }) {
+export default function Dropzone({
+  mode = 'wifi', // 'wifi' or 'p2p'
+  isConnected = true,
+  onSendFiles,
+  isUploading,
+  onCancelActiveTransfer,
+}) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [statusMessage, setStatusMessage] = useState(null);
@@ -67,10 +73,14 @@ export default function Dropzone({ isConnected, onSendFiles, isUploading, onCanc
 
   const startUpload = async () => {
     if (selectedFiles.length === 0 || isUploading) return;
+
     if (!isConnected) {
       setStatusMessage({
         type: 'error',
-        text: 'Please pair / connect to a device first before sending files!',
+        text:
+          mode === 'wifi'
+            ? 'WiFi Hub is unreachable. Please verify server is running on this WiFi.'
+            : 'Please pair / connect to a device with code first before sending files!',
       });
       return;
     }
@@ -82,7 +92,10 @@ export default function Dropzone({ isConnected, onSendFiles, isUploading, onCanc
       setSelectedFiles([]);
       setStatusMessage({
         type: 'success',
-        text: 'All files sent successfully with ultra-fast speed!',
+        text:
+          mode === 'wifi'
+            ? '✅ File(s) uploaded successfully! Ab neeche list mein Download ka option aa chuka hai.'
+            : '✅ All files sent successfully with direct P2P speed!',
       });
     } catch (err) {
       if (err.message !== 'Transfer cancelled') {
@@ -136,7 +149,11 @@ export default function Dropzone({ isConnected, onSendFiles, isUploading, onCanc
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          <UploadCloud size={28} color="#BC0202" />
+          {mode === 'wifi' ? (
+            <Wifi size={28} color="#BC0202" />
+          ) : (
+            <UploadCloud size={28} color="#BC0202" />
+          )}
         </div>
 
         <h3 style={{
@@ -152,13 +169,22 @@ export default function Dropzone({ isConnected, onSendFiles, isUploading, onCanc
         <p style={{
           color: 'var(--text-muted)',
           fontSize: '0.84rem',
-          maxWidth: 520,
+          maxWidth: 540,
           margin: '0 auto 14px',
           lineHeight: 1.4,
         }}>
-          Transfer files across any mobile, PC or laptop.{' '}
-          <strong style={{ color: '#BC0202' }}>Unlimited file size</strong>, up to{' '}
-          <strong>10 files per batch</strong>.
+          {mode === 'wifi' ? (
+            <>
+              <strong>Same WiFi Transfer (Bina Code Ke):</strong> File pehle upload hogi (0-100%), phir sabhi devices par{' '}
+              <strong style={{ color: '#BC0202' }}>Download</strong> ka button aayega. Unlimited size (5GB+ supported), up to 10 files.
+            </>
+          ) : (
+            <>
+              Direct device-to-device streaming. 6-digit code se pair karein.{' '}
+              <strong style={{ color: '#BC0202' }}>Unlimited file size</strong>, up to{' '}
+              <strong>10 files per batch</strong>.
+            </>
+          )}
         </p>
 
         {/* Specs pills */}
@@ -170,13 +196,13 @@ export default function Dropzone({ isConnected, onSendFiles, isUploading, onCanc
           flexWrap: 'wrap',
         }}>
           <span className="clean-pill" style={{ color: '#475569' }}>
-            <Zap size={13} color="#BC0202" /> IDM-Speed Direct SCTP
+            <Zap size={13} color="#BC0202" /> Ultra-Fast LAN / WiFi Speed
           </span>
           <span className="clean-pill" style={{ color: '#475569' }}>
             <Sparkles size={13} color="#BC0202" /> Max 10 Files / Batch
           </span>
           <span className="clean-pill" style={{ color: '#475569' }}>
-            <ArrowUp size={13} color="#BC0202" /> Unlimited GB Support
+            <ArrowUp size={13} color="#BC0202" /> 5GB+ Supported
           </span>
         </div>
       </div>
@@ -331,7 +357,11 @@ export default function Dropzone({ isConnected, onSendFiles, isUploading, onCanc
             >
               <ArrowUp size={15} />
               <span>
-                {isConnected
+                {isUploading
+                  ? 'Transferring...'
+                  : mode === 'wifi'
+                  ? `Upload ${selectedFiles.length} File(s) to WiFi Hub`
+                  : isConnected
                   ? `Send ${selectedFiles.length} File(s) Direct`
                   : 'Pair Device to Send'}
               </span>
