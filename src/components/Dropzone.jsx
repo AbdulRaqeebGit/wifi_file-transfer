@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { UploadCloud, File, X, CheckCircle, AlertTriangle, ArrowUp, Zap, Sparkles, Wifi } from 'lucide-react';
+import { UploadCloud, File, X, CheckCircle, AlertTriangle, ArrowUp, Zap, Sparkles, HardDrive } from 'lucide-react';
 import { formatBytes } from '../utils/formatters';
 import { sound } from '../utils/sound';
 
@@ -79,7 +79,7 @@ export default function Dropzone({
         type: 'error',
         text:
           mode === 'wifi'
-            ? 'WiFi Hub is unreachable. Please verify server is running on this WiFi.'
+            ? 'WiFi Hub is offline. Please start local server with node server.js.'
             : 'Please pair / connect to a device with code first before sending files!',
       });
       return;
@@ -94,14 +94,14 @@ export default function Dropzone({
         type: 'success',
         text:
           mode === 'wifi'
-            ? '✅ File(s) uploaded successfully! Ab neeche list mein Download ka option aa chuka hai.'
+            ? '✅ File(s) successfully uploaded to WiFi Cloud! Ab sabhi devices par neeche Download ka option aa gaya hai (chahe koi user abhi online na ho).'
             : '✅ All files sent successfully with direct P2P speed!',
       });
     } catch (err) {
       if (err.message !== 'Transfer cancelled') {
         setStatusMessage({
           type: 'error',
-          text: err.message || 'File transfer failed. Please check connection.',
+          text: err.message || 'File upload failed. Please check connection.',
         });
       }
     }
@@ -150,7 +150,7 @@ export default function Dropzone({
           justifyContent: 'center',
         }}>
           {mode === 'wifi' ? (
-            <Wifi size={28} color="#BC0202" />
+            <HardDrive size={28} color="#BC0202" />
           ) : (
             <UploadCloud size={28} color="#BC0202" />
           )}
@@ -163,20 +163,24 @@ export default function Dropzone({
           marginBottom: 6,
           fontFamily: 'var(--font-sans)',
         }}>
-          {isDragOver ? 'Release to Drop Files Here' : 'Drag & Drop files here, or Click to Browse'}
+          {isDragOver
+            ? 'Release to Drop Files Here'
+            : mode === 'wifi'
+            ? 'Drop Files to Upload to Open WiFi Cloud'
+            : 'Drag & Drop files here, or Click to Browse'}
         </h3>
 
         <p style={{
           color: 'var(--text-muted)',
           fontSize: '0.84rem',
-          maxWidth: 540,
+          maxWidth: 560,
           margin: '0 auto 14px',
           lineHeight: 1.4,
         }}>
           {mode === 'wifi' ? (
             <>
-              <strong>Same WiFi Transfer (Bina Code Ke):</strong> File pehle upload hogi (0-100%), phir sabhi devices par{' '}
-              <strong style={{ color: '#BC0202' }}>Download</strong> ka button aayega. Unlimited size (5GB+ supported), up to 10 files.
+              <strong>Bina Code / Kisi User Ke Online Huye Bager:</strong> File pehle mukammal upload hogi (0-100%), phir sabhi devices par{' '}
+              <strong style={{ color: '#BC0202' }}>Download</strong> ka button aayega. Kisi link ya code bejne ki zaroorat nahi hai. Jo bhi WiFi par aayega direct access karega!
             </>
           ) : (
             <>
@@ -196,13 +200,13 @@ export default function Dropzone({
           flexWrap: 'wrap',
         }}>
           <span className="clean-pill" style={{ color: '#475569' }}>
-            <Zap size={13} color="#BC0202" /> Ultra-Fast LAN / WiFi Speed
+            <Zap size={13} color="#BC0202" /> Ultra-Fast WiFi Speed
           </span>
           <span className="clean-pill" style={{ color: '#475569' }}>
             <Sparkles size={13} color="#BC0202" /> Max 10 Files / Batch
           </span>
           <span className="clean-pill" style={{ color: '#475569' }}>
-            <ArrowUp size={13} color="#BC0202" /> 5GB+ Supported
+            <ArrowUp size={13} color="#BC0202" /> 5GB+ Unlimited Size
           </span>
         </div>
       </div>
@@ -239,7 +243,7 @@ export default function Dropzone({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
-                Transfer Queue ({selectedFiles.length} / {MAX_FILES})
+                Upload Queue ({selectedFiles.length} / {MAX_FILES})
               </h4>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 Total: {formatBytes(totalSelectedSize)}
@@ -342,7 +346,7 @@ export default function Dropzone({
                 style={{ padding: '8px 16px', fontSize: '0.84rem' }}
               >
                 <X size={15} />
-                <span>Cancel Transfer (X)</span>
+                <span>Cancel Upload (X)</span>
               </button>
             )}
 
@@ -358,9 +362,9 @@ export default function Dropzone({
               <ArrowUp size={15} />
               <span>
                 {isUploading
-                  ? 'Transferring...'
+                  ? 'Uploading...'
                   : mode === 'wifi'
-                  ? `Upload ${selectedFiles.length} File(s) to WiFi Hub`
+                  ? `Upload ${selectedFiles.length} File(s) to WiFi Cloud`
                   : isConnected
                   ? `Send ${selectedFiles.length} File(s) Direct`
                   : 'Pair Device to Send'}

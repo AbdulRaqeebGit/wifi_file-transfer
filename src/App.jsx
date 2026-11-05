@@ -12,17 +12,14 @@ import TransferProgressCard from './components/TransferProgressCard';
 import { P2PManager } from './utils/p2p';
 import { downloadAllAsZip } from './utils/zip';
 import { sound } from './utils/sound';
-import { Wifi, Radio, Zap, Sparkles } from 'lucide-react';
+import { HardDrive, Zap, MessageSquare, CloudCheck } from 'lucide-react';
 
 export default function App() {
-  // ── Transfer Mode: 'wifi' (No Code / Same WiFi Hub) or 'p2p' (6-Digit Code) ─
-  const [transferMode, setTransferMode] = useState('wifi');
+  // ── Main Section: 'wifi' (Open WiFi Cloud), 'p2p' (Direct P2P), 'board' (Text & Links) ─
+  const [activeSection, setActiveSection] = useState('wifi');
 
-  // ── Mode Switcher Tab: 'files', 'text', 'links' ───────────────────────────
-  const [activeTab, setActiveTab] = useState('files');
-
-  // ── Same WiFi Hub State ───────────────────────────────────────────────────
-  const [isServerOnline, setIsServerOnline] = useState(false);
+  // ── Open WiFi Cloud State ─────────────────────────────────────────────────
+  const [isServerOnline, setIsServerOnline] = useState(true);
   const [serverInfo, setServerInfo] = useState(null);
   const [activeClients, setActiveClients] = useState(0);
   const [wifiFiles, setWifiFiles] = useState([]);
@@ -47,7 +44,7 @@ export default function App() {
   const p2pRef = useRef(null);
   const xhrUploadRef = useRef(null);
 
-  // ── 1. Same WiFi Hub Initialization & Real-Time Sync (SSE) ────────────────
+  // ── 1. Open WiFi Cloud Initialization & Real-Time Sync (SSE) ──────────────
   const fetchWifiFiles = useCallback(async () => {
     try {
       const res = await fetch('/api/files');
@@ -152,7 +149,6 @@ export default function App() {
       });
 
       sse.onerror = () => {
-        // Fallback polling if SSE drops
         setIsServerOnline(false);
       };
     } catch {}
@@ -175,7 +171,7 @@ export default function App() {
         const hash = window.location.hash;
         const match = hash.match(/#connect=([a-zA-Z0-9]+)/);
         if (match && match[1] && match[1] !== code) {
-          setTransferMode('p2p');
+          setActiveSection('p2p');
           setTimeout(() => p2p.connectToPeer(match[1]), 600);
         }
       },
@@ -199,12 +195,12 @@ export default function App() {
       onTextReceived: (textItem) => {
         sound.playSuccess();
         setP2pTextHistory((prev) => [textItem, ...prev]);
-        setActiveTab('text');
+        setActiveSection('board');
       },
       onLinkReceived: (linkItem) => {
         sound.playSuccess();
         setP2pLinkHistory((prev) => [linkItem, ...prev]);
-        setActiveTab('links');
+        setActiveSection('board');
       },
       onTransferStart: (info) => {
         setActiveTransfer({
@@ -235,7 +231,7 @@ export default function App() {
         setP2pFiles((prev) => [newFile, ...prev]);
         setActiveTransfer(null);
         setIsUploading(false);
-        setActiveTab('files');
+        setActiveSection('p2p');
       },
       onTransferCancelled: ({ byRemote }) => {
         sound.playClick();
@@ -256,7 +252,7 @@ export default function App() {
     };
   }, []);
 
-  // ── 3. WiFi Upload Handling (pehle upload ho jaye, phir download option aaye)
+  // ── 3. WiFi Upload (Bina Kisi User Ke Online Huye Direct Upload) ───────────
   const handleUploadWifiFiles = async (filesToSend) => {
     if (!filesToSend || filesToSend.length === 0) return;
 
@@ -367,7 +363,7 @@ export default function App() {
 
   // ── 5. Cancel Current Transfer ────────────────────────────────────────────
   const handleCancelTransfer = (fileId) => {
-    if (transferMode === 'wifi') {
+    if (activeSection === 'wifi') {
       if (xhrUploadRef.current) {
         xhrUploadRef.current.abort();
         xhrUploadRef.current = null;
@@ -386,21 +382,18 @@ export default function App() {
 
   // ── 6. Text & Link Sharing Handlers ───────────────────────────────────────
   const handleSendText = async (text) => {
-    if (transferMode === 'wifi') {
-      try {
-        const res = await fetch('/api/text', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
-        });
-        if (res.ok) {
-          const item = await res.json();
-          setWifiTextHistory((prev) => [item, ...prev]);
-        }
-      } catch (err) {
-        alert('Failed to send text to WiFi network: ' + err.message);
+    try {
+      const res = await fetch('/api/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (res.ok) {
+        const item = await res.json();
+        setWifiTextHistory((prev) => [item, ...prev]);
       }
-    } else {
+    } catch (err) {
+      // Fallback to P2P if server offline
       if (p2pRef.current && isConnected) {
         p2pRef.current.sendText(text);
         setP2pTextHistory((prev) => [
@@ -412,21 +405,17 @@ export default function App() {
   };
 
   const handleSendLink = async (url, title) => {
-    if (transferMode === 'wifi') {
-      try {
-        const res = await fetch('/api/link', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, title }),
-        });
-        if (res.ok) {
-          const item = await res.json();
-          setWifiLinkHistory((prev) => [item, ...prev]);
-        }
-      } catch (err) {
-        alert('Failed to send link to WiFi network: ' + err.message);
+    try {
+      const res = await fetch('/api/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, title }),
+      });
+      if (res.ok) {
+        const item = await res.json();
+        setWifiLinkHistory((prev) => [item, ...prev]);
       }
-    } else {
+    } catch (err) {
       if (p2pRef.current && isConnected) {
         p2pRef.current.sendLink(url, title);
         setP2pLinkHistory((prev) => [
@@ -441,7 +430,7 @@ export default function App() {
   const handleDeleteFile = async (id) => {
     if (!window.confirm('Delete this file?')) return;
 
-    if (transferMode === 'wifi') {
+    if (activeSection === 'wifi') {
       try {
         await fetch(`/api/files/${id}`, { method: 'DELETE' });
         setWifiFiles((prev) => prev.filter((f) => f.id !== id));
@@ -460,7 +449,7 @@ export default function App() {
   const handleClearAllFiles = async () => {
     if (!window.confirm('Clear all files?')) return;
 
-    if (transferMode === 'wifi') {
+    if (activeSection === 'wifi') {
       try {
         await fetch('/api/files', { method: 'DELETE' });
         setWifiFiles([]);
@@ -479,23 +468,20 @@ export default function App() {
 
   // ── 8. Download All as ZIP ────────────────────────────────────────────────
   const handleDownloadAll = () => {
-    if (transferMode === 'wifi') {
+    if (activeSection === 'wifi') {
       window.location.href = '/api/download-all';
     } else {
       downloadAllAsZip(p2pFiles);
     }
   };
 
-  // Active files, texts, links based on current mode
-  const currentFiles = transferMode === 'wifi' ? wifiFiles : p2pFiles;
-  const currentTextHistory = transferMode === 'wifi' ? wifiTextHistory : p2pTextHistory;
-  const currentLinkHistory = transferMode === 'wifi' ? wifiLinkHistory : p2pLinkHistory;
+  const currentFiles = activeSection === 'wifi' ? wifiFiles : p2pFiles;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', width: '100%', overflowX: 'hidden' }}>
       {/* Top Navbar */}
       <Navbar
-        transferMode={transferMode}
+        transferMode={activeSection}
         isServerOnline={isServerOnline}
         isConnected={isConnected}
         remoteCode={remoteCode}
@@ -515,65 +501,63 @@ export default function App() {
             margin: '0 0 6px',
             color: '#0f172a',
           }}>
-            Transfer <span style={{ color: '#BC0202' }}>Files, Text & Links</span> Anywhere
+            AR | WiFi | TR — <span style={{ color: '#BC0202' }}>Local WiFi File Transfer</span>
           </h2>
 
           <p style={{
             fontSize: '0.88rem',
             color: '#64748b',
-            maxWidth: 600,
+            maxWidth: 640,
             margin: '0 auto',
             lineHeight: 1.4,
           }}>
-            {transferMode === 'wifi'
-              ? 'Bina kisi code ke: Same WiFi par pehle file upload karein, phir koi bhi device foran download kar sakta hai!'
-              : 'Direct WebRTC device-to-device pairing. 6-digit code enter karein ya phone se scan karein!'}
+            Bina kisi code ke: Direct file upload karein. File disk par save rehti hai aur same WiFi par koi bhi kabhi bhi access kar sakta hai!
           </p>
         </div>
 
-        {/* ── Prominent Mode Switcher (WiFi vs P2P) ───────────────────────── */}
+        {/* ── 3 Main Top Sections (Cloud, P2P, Board) ─────────────────────── */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
           gap: 10,
           marginBottom: 16,
         }}>
-          {/* Option 1: Same WiFi (No Code) */}
+          {/* Section 1: Open WiFi Cloud (No Code / Offline User Supported) */}
           <button
             onClick={() => {
               sound.playClick();
-              setTransferMode('wifi');
+              setActiveSection('wifi');
             }}
             style={{
-              padding: '12px 16px',
+              padding: '12px 14px',
               borderRadius: 10,
-              border: transferMode === 'wifi' ? '2px solid #BC0202' : '1px solid #cbd5e1',
-              backgroundColor: transferMode === 'wifi' ? '#ffffff' : '#f8fafc',
+              border: activeSection === 'wifi' ? '2px solid #BC0202' : '1px solid #cbd5e1',
+              backgroundColor: activeSection === 'wifi' ? '#ffffff' : '#f8fafc',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
               textAlign: 'left',
-              boxShadow: transferMode === 'wifi' ? '0 4px 12px rgba(188, 2, 2, 0.12)' : 'none',
+              boxShadow: activeSection === 'wifi' ? '0 4px 12px rgba(188, 2, 2, 0.12)' : 'none',
               transition: 'all 0.15s ease',
             }}
           >
             <div style={{
-              width: 40,
-              height: 40,
+              width: 42,
+              height: 42,
               borderRadius: 8,
-              backgroundColor: transferMode === 'wifi' ? '#fee2e2' : '#e2e8f0',
+              backgroundColor: activeSection === 'wifi' ? '#fee2e2' : '#e2e8f0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}>
-              <Wifi size={22} color={transferMode === 'wifi' ? '#BC0202' : '#64748b'} />
+              <HardDrive size={22} color={activeSection === 'wifi' ? '#BC0202' : '#64748b'} />
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: transferMode === 'wifi' ? '#BC0202' : '#0f172a' }}>
-                  🌐 Same WiFi (No Code)
+                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: activeSection === 'wifi' ? '#BC0202' : '#0f172a' }}>
+                  🌐 Open WiFi Cloud
                 </span>
                 <span style={{
                   fontSize: '0.68rem',
@@ -583,51 +567,51 @@ export default function App() {
                   padding: '1px 6px',
                   borderRadius: 4,
                 }}>
-                  Easy
+                  No Code
                 </span>
               </div>
               <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                Bager code ke: Pehle upload ho jaye, phir download ka option aaye
+                Direct upload • User offline ho tab bhi chalega • Har koi access kare
               </div>
             </div>
           </button>
 
-          {/* Option 2: Direct P2P (6-Digit Code) */}
+          {/* Section 2: Direct P2P Transfer (6-Digit Code) */}
           <button
             onClick={() => {
               sound.playClick();
-              setTransferMode('p2p');
+              setActiveSection('p2p');
             }}
             style={{
-              padding: '12px 16px',
+              padding: '12px 14px',
               borderRadius: 10,
-              border: transferMode === 'p2p' ? '2px solid #BC0202' : '1px solid #cbd5e1',
-              backgroundColor: transferMode === 'p2p' ? '#ffffff' : '#f8fafc',
+              border: activeSection === 'p2p' ? '2px solid #BC0202' : '1px solid #cbd5e1',
+              backgroundColor: activeSection === 'p2p' ? '#ffffff' : '#f8fafc',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
               textAlign: 'left',
-              boxShadow: transferMode === 'p2p' ? '0 4px 12px rgba(188, 2, 2, 0.12)' : 'none',
+              boxShadow: activeSection === 'p2p' ? '0 4px 12px rgba(188, 2, 2, 0.12)' : 'none',
               transition: 'all 0.15s ease',
             }}
           >
             <div style={{
-              width: 40,
-              height: 40,
+              width: 42,
+              height: 42,
               borderRadius: 8,
-              backgroundColor: transferMode === 'p2p' ? '#fee2e2' : '#e2e8f0',
+              backgroundColor: activeSection === 'p2p' ? '#fee2e2' : '#e2e8f0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}>
-              <Zap size={22} color={transferMode === 'p2p' ? '#BC0202' : '#64748b'} />
+              <Zap size={22} color={activeSection === 'p2p' ? '#BC0202' : '#64748b'} />
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: transferMode === 'p2p' ? '#BC0202' : '#0f172a' }}>
-                  ⚡ Direct P2P (Code Pairing)
+                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: activeSection === 'p2p' ? '#BC0202' : '#0f172a' }}>
+                  ⚡ Direct P2P
                 </span>
                 <span style={{
                   fontSize: '0.68rem',
@@ -637,157 +621,98 @@ export default function App() {
                   padding: '1px 6px',
                   borderRadius: 4,
                 }}>
-                  GitHub Pages
+                  6-Digit Code
                 </span>
               </div>
               <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                Direct WebRTC: 6-digit code se pair karein aur share karein
+                Live device-to-device stream • GitHub Pages ready
+              </div>
+            </div>
+          </button>
+
+          {/* Section 3: WiFi Notice Board (Text & Links) */}
+          <button
+            onClick={() => {
+              sound.playClick();
+              setActiveSection('board');
+            }}
+            style={{
+              padding: '12px 14px',
+              borderRadius: 10,
+              border: activeSection === 'board' ? '2px solid #BC0202' : '1px solid #cbd5e1',
+              backgroundColor: activeSection === 'board' ? '#ffffff' : '#f8fafc',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              textAlign: 'left',
+              boxShadow: activeSection === 'board' ? '0 4px 12px rgba(188, 2, 2, 0.12)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <div style={{
+              width: 42,
+              height: 42,
+              borderRadius: 8,
+              backgroundColor: activeSection === 'board' ? '#fee2e2' : '#e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <MessageSquare size={22} color={activeSection === 'board' ? '#BC0202' : '#64748b'} />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: activeSection === 'board' ? '#BC0202' : '#0f172a' }}>
+                  💬 WiFi Text & Links
+                </span>
+                <span style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  backgroundColor: '#f1f5f9',
+                  color: '#475569',
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                }}>
+                  Broadcast
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                Clipboard text, notes, OTPs & URLs instant share
               </div>
             </div>
           </button>
         </div>
 
-        {/* ── Mode-Specific Bar: WifiBar vs ConnectionBar ─────────────────── */}
-        {transferMode === 'wifi' ? (
-          <WifiBar
-            serverInfo={serverInfo}
-            isServerOnline={isServerOnline}
-            activeClients={activeClients}
-            onOpenQr={() => setIsQrOpen(true)}
-            onRefresh={() => {
-              fetchServerInfo();
-              fetchWifiFiles();
-              fetchWifiTexts();
-              fetchWifiLinks();
-            }}
-          />
-        ) : (
-          <ConnectionBar
-            myCode={myCode}
-            remoteCode={remoteCode}
-            isConnected={isConnected}
-            isConnecting={isConnecting}
-            onConnect={(targetCode) => p2pRef.current?.connectToPeer(targetCode)}
-            onDisconnect={() => p2pRef.current?.disconnect()}
-            onOpenQr={() => setIsQrOpen(true)}
-          />
-        )}
-
-        {/* ── Subtabs: Files, Text, Links ─────────────────────────────────── */}
-        <div
-          className="responsive-tabs"
-          style={{
-            display: 'flex',
-            gap: 6,
-            marginBottom: 14,
-            borderBottom: '1px solid #e2e8f0',
-            paddingBottom: 8,
-          }}
-        >
-          <button
-            onClick={() => setActiveTab('files')}
-            style={{
-              backgroundColor: activeTab === 'files' ? '#BC0202' : '#ffffff',
-              color: activeTab === 'files' ? '#ffffff' : '#475569',
-              border: activeTab === 'files' ? '1px solid #BC0202' : '1px solid #cbd5e1',
-              borderRadius: 6,
-              padding: '7px 14px',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <span>📁 Files</span>
-            {currentFiles.length > 0 && (
-              <span style={{
-                backgroundColor: activeTab === 'files' ? '#ffffff' : '#fee2e2',
-                color: '#BC0202',
-                padding: '1px 5px',
-                borderRadius: 4,
-                fontSize: '0.7rem',
-              }}>
-                {currentFiles.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('text')}
-            style={{
-              backgroundColor: activeTab === 'text' ? '#BC0202' : '#ffffff',
-              color: activeTab === 'text' ? '#ffffff' : '#475569',
-              border: activeTab === 'text' ? '1px solid #BC0202' : '1px solid #cbd5e1',
-              borderRadius: 6,
-              padding: '7px 14px',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <span>💬 Text / Notes</span>
-            {currentTextHistory.length > 0 && (
-              <span style={{
-                backgroundColor: activeTab === 'text' ? '#ffffff' : '#fee2e2',
-                color: '#BC0202',
-                padding: '1px 5px',
-                borderRadius: 4,
-                fontSize: '0.7rem',
-              }}>
-                {currentTextHistory.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('links')}
-            style={{
-              backgroundColor: activeTab === 'links' ? '#BC0202' : '#ffffff',
-              color: activeTab === 'links' ? '#ffffff' : '#475569',
-              border: activeTab === 'links' ? '1px solid #BC0202' : '1px solid #cbd5e1',
-              borderRadius: 6,
-              padding: '7px 14px',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <span>🔗 Links / URLs</span>
-            {currentLinkHistory.length > 0 && (
-              <span style={{
-                backgroundColor: activeTab === 'links' ? '#ffffff' : '#fee2e2',
-                color: '#BC0202',
-                padding: '1px 5px',
-                borderRadius: 4,
-                fontSize: '0.7rem',
-              }}>
-                {currentLinkHistory.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* ── Tab Contents ────────────────────────────────────────────────── */}
-        {activeTab === 'files' && (
+        {/* ── Section 1: Open WiFi Cloud (No Code / Direct Upload) ─────────── */}
+        {activeSection === 'wifi' && (
           <>
+            <WifiBar
+              serverInfo={serverInfo}
+              isServerOnline={isServerOnline}
+              activeClients={activeClients}
+              onOpenQr={() => setIsQrOpen(true)}
+              onRefresh={() => {
+                fetchServerInfo();
+                fetchWifiFiles();
+                fetchWifiTexts();
+                fetchWifiLinks();
+              }}
+            />
+
             <Dropzone
-              mode={transferMode}
-              isConnected={transferMode === 'wifi' ? isServerOnline : isConnected}
-              onSendFiles={transferMode === 'wifi' ? handleUploadWifiFiles : handleSendP2PFiles}
+              mode="wifi"
+              isConnected={isServerOnline}
+              onSendFiles={handleUploadWifiFiles}
               isUploading={isUploading}
               onCancelActiveTransfer={() => handleCancelTransfer(activeTransfer?.fileId)}
             />
 
             <FileList
-              files={currentFiles}
+              files={wifiFiles}
+              title="Shared WiFi Cloud Files"
+              subTitle="Disk par saved files — is WiFi se connected sabhi devices kabhi bhi download kar sakte hain (chahe user online na ho)"
               onDeleteFile={handleDeleteFile}
               onClearAll={handleClearAllFiles}
               onPreviewFile={(file) => setPreviewFile(file)}
@@ -796,36 +721,70 @@ export default function App() {
           </>
         )}
 
-        {activeTab === 'text' && (
-          <TextShare
-            isConnected={transferMode === 'wifi' ? isServerOnline : isConnected}
-            onSendText={handleSendText}
-            textHistory={currentTextHistory}
-            onClearHistory={() => {
-              if (transferMode === 'wifi') {
-                fetch('/api/text', { method: 'DELETE' });
-                setWifiTextHistory([]);
-              } else {
-                setP2pTextHistory([]);
-              }
-            }}
-          />
+        {/* ── Section 2: Direct P2P WebRTC (6-Digit Code) ─────────────────── */}
+        {activeSection === 'p2p' && (
+          <>
+            <ConnectionBar
+              myCode={myCode}
+              remoteCode={remoteCode}
+              isConnected={isConnected}
+              isConnecting={isConnecting}
+              onConnect={(targetCode) => p2pRef.current?.connectToPeer(targetCode)}
+              onDisconnect={() => p2pRef.current?.disconnect()}
+              onOpenQr={() => setIsQrOpen(true)}
+            />
+
+            <Dropzone
+              mode="p2p"
+              isConnected={isConnected}
+              onSendFiles={handleSendP2PFiles}
+              isUploading={isUploading}
+              onCancelActiveTransfer={() => handleCancelTransfer(activeTransfer?.fileId)}
+            />
+
+            <FileList
+              files={p2pFiles}
+              title="P2P Received Files"
+              subTitle="Live paired device se aayi hui files — Download dabakar save karein"
+              onDeleteFile={handleDeleteFile}
+              onClearAll={handleClearAllFiles}
+              onPreviewFile={(file) => setPreviewFile(file)}
+              onDownloadAll={handleDownloadAll}
+            />
+          </>
         )}
 
-        {activeTab === 'links' && (
-          <LinkShare
-            isConnected={transferMode === 'wifi' ? isServerOnline : isConnected}
-            onSendLink={handleSendLink}
-            linkHistory={currentLinkHistory}
-            onClearHistory={() => {
-              if (transferMode === 'wifi') {
-                fetch('/api/link', { method: 'DELETE' });
-                setWifiLinkHistory([]);
-              } else {
-                setP2pLinkHistory([]);
-              }
-            }}
-          />
+        {/* ── Section 3: WiFi Notice Board (Text & Links) ──────────────────── */}
+        {activeSection === 'board' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <TextShare
+              isConnected={isServerOnline || isConnected}
+              onSendText={handleSendText}
+              textHistory={isServerOnline ? wifiTextHistory : p2pTextHistory}
+              onClearHistory={() => {
+                if (isServerOnline) {
+                  fetch('/api/text', { method: 'DELETE' });
+                  setWifiTextHistory([]);
+                } else {
+                  setP2pTextHistory([]);
+                }
+              }}
+            />
+
+            <LinkShare
+              isConnected={isServerOnline || isConnected}
+              onSendLink={handleSendLink}
+              linkHistory={isServerOnline ? wifiLinkHistory : p2pLinkHistory}
+              onClearHistory={() => {
+                if (isServerOnline) {
+                  fetch('/api/link', { method: 'DELETE' });
+                  setWifiLinkHistory([]);
+                } else {
+                  setP2pLinkHistory([]);
+                }
+              }}
+            />
+          </div>
         )}
       </main>
 
@@ -848,7 +807,7 @@ export default function App() {
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontWeight: 800, color: '#BC0202' }}>AR | WiFi | TR</span>
-            <span>• Same WiFi Hub & Direct P2P WebRTC Transfer</span>
+            <span>• Open WiFi Cloud Storage & Direct P2P Transfer</span>
           </div>
           <div>
             <span>5GB+ Unlimited Size Supported • IDM High Speed</span>
@@ -861,11 +820,11 @@ export default function App() {
         isOpen={isQrOpen}
         onClose={() => setIsQrOpen(false)}
         myCode={myCode}
-        targetUrl={transferMode === 'wifi' ? serverInfo?.networkUrl : null}
-        title={transferMode === 'wifi' ? 'Scan to Open on Same WiFi' : 'Scan to Connect Phone'}
+        targetUrl={activeSection === 'wifi' ? serverInfo?.networkUrl : null}
+        title={activeSection === 'wifi' ? 'Scan to Open WiFi Cloud on Mobile' : 'Scan to Connect Phone'}
         subtext={
-          transferMode === 'wifi'
-            ? 'Phone camera se scan karein. Bina kisi code ke same WiFi par files share karein!'
+          activeSection === 'wifi'
+            ? 'Phone camera se scan karein. Kisi code ya link bejne ki zaroorat nahi, har koi direct access karega!'
             : 'Phone camera se scan karein. Direct P2P 6-digit code se pair hoga.'
         }
       />

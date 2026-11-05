@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Wifi, Copy, Check, QrCode, Users, HelpCircle, RefreshCw, Globe, Sparkles } from 'lucide-react';
+import { Wifi, Copy, Check, QrCode, Users, HelpCircle, RefreshCw, Sparkles, CloudCheck, HardDrive } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function WifiBar({
   serverInfo,
-  isServerOnline,
-  activeClients,
+  isServerOnline = true,
+  activeClients = 0,
   onOpenQr,
   onRefresh,
 }) {
@@ -38,9 +38,9 @@ export default function WifiBar({
         {/* Left: WiFi Hub Status & Network Address */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <div style={{
-            width: 42,
-            height: 42,
-            borderRadius: 8,
+            width: 44,
+            height: 44,
+            borderRadius: 10,
             backgroundColor: isServerOnline ? '#dcfce7' : '#fee2e2',
             border: `1px solid ${isServerOnline ? '#86efac' : '#fca5a5'}`,
             display: 'flex',
@@ -48,21 +48,21 @@ export default function WifiBar({
             justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <Wifi size={22} color={isServerOnline ? '#166534' : '#BC0202'} />
+            <HardDrive size={22} color={isServerOnline ? '#166534' : '#BC0202'} />
           </div>
 
           <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span style={{
                 fontSize: '0.72rem',
                 color: isServerOnline ? '#166534' : '#991b1b',
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 backgroundColor: isServerOnline ? '#dcfce7' : '#fee2e2',
-                padding: '1px 6px',
+                padding: '2px 8px',
                 borderRadius: 4,
               }}>
-                {isServerOnline ? '🟢 WiFi Hub Active (No Code Needed)' : '🔴 Hub Disconnected'}
+                {isServerOnline ? '🟢 Open WiFi Cloud (No Code / Offline Ready)' : '🔴 Cloud Disconnected'}
               </span>
 
               {activeClients > 0 && (
@@ -74,7 +74,7 @@ export default function WifiBar({
                   gap: 3,
                 }}>
                   <Users size={12} color="#BC0202" />
-                  <strong>{activeClients}</strong> {activeClients === 1 ? 'device' : 'devices'}
+                  <strong>{activeClients}</strong> {activeClients === 1 ? 'device online' : 'devices online'}
                 </span>
               )}
             </div>
@@ -108,10 +108,10 @@ export default function WifiBar({
                   fontSize: '0.74rem',
                   color: '#475569',
                 }}
-                title="Copy WiFi URL"
+                title="Copy WiFi Website URL"
               >
                 {copied ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
-                <span>{copied ? 'Copied' : 'Copy Link'}</span>
+                <span>{copied ? 'Copied' : 'Copy Web Link'}</span>
               </button>
 
               <button
@@ -139,10 +139,10 @@ export default function WifiBar({
             }}
             className="btn-secondary"
             style={{ padding: '6px 10px', fontSize: '0.76rem' }}
-            title="Refresh WiFi files"
+            title="Sync files"
           >
             <RefreshCw size={13} />
-            <span>Sync</span>
+            <span>Sync Files</span>
           </button>
 
           <button
@@ -158,10 +158,10 @@ export default function WifiBar({
               fontSize: '0.76rem',
               padding: '6px 8px',
             }}
-            title="How Same WiFi works?"
+            title="How Open WiFi Cloud works?"
           >
             <HelpCircle size={14} color="#BC0202" />
-            <span>Same WiFi Guide</span>
+            <span>Kaise Kaam Karta Hai?</span>
           </button>
         </div>
       </div>
@@ -180,13 +180,13 @@ export default function WifiBar({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
             <Sparkles size={14} color="#BC0202" />
-            <strong>Bina Code Ke Same WiFi Transfer Kaise Kaam Karta Hai?</strong>
+            <strong>Open WiFi Cloud — Kisi Code Ya User Ke Online Huye Bager:</strong>
           </div>
           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-            <li><strong>Kisi code ki zaroorat nahi hai:</strong> Jab dono devices (laptop aur mobile) same WiFi / Hotspot se connected hon.</li>
-            <li><strong>Mobile par open karein:</strong> Phone camera se <strong>"Scan QR"</strong> button dabakar QR scan karein ya browser mein <code>{networkUrl}</code> kholein.</li>
-            <li><strong>Pehle Upload, Phir Download:</strong> File pehle poori upload hogi (0% to 100%), upload mukammal hone ke baad hi doosre device par "Download" ka button aayega.</li>
-            <li><strong>Ultra-Fast IDM Speed:</strong> HTTP Range support ke sath downloading super fast download manager speed se hoti hai!</li>
+            <li><strong>User ka online hona zaroori nahi:</strong> Aap abhi file upload kar dein. File permanent disk par save ho jati hai. Doosra banda chahe 2 ghante baad aaye, usay file foran mil jayegi.</li>
+            <li><strong>Koi code ya link bejne ki zaroorat nahi:</strong> Jo bhi is WiFi se connect hoga aur browser mein <code>{networkUrl}</code> kholega, usay saari files seedhi nazar aayengi.</li>
+            <li><strong>Pehle Upload, Phir Download:</strong> File pehle poori upload hogi (0% to 100%). Upload complete hote hi sabhi devices par <strong>"Download"</strong> ka button unlock ho jayega!</li>
+            <li><strong>IDM & Multi-Thread Speed:</strong> HTTP Range resume support ke sath downloading full speed se hoti hai!</li>
           </ul>
         </div>
       )}

@@ -13,12 +13,17 @@ import {
   File,
   Layers,
   ArrowUpDown,
+  Copy,
+  Check,
+  Cloud,
 } from 'lucide-react';
 import { formatBytes, formatTimeAgo, getFileCategory } from '../utils/formatters';
 import { sound } from '../utils/sound';
 
 export default function FileList({
   files = [],
+  title = 'Public WiFi Cloud Files',
+  subTitle = 'Files stored on this WiFi network — accessible to anyone connected anytime, even if other users are offline',
   onDeleteFile,
   onClearAll,
   onPreviewFile,
@@ -27,6 +32,7 @@ export default function FileList({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
+  const [copiedId, setCopiedId] = useState(null);
 
   const getIcon = (category) => {
     switch (category) {
@@ -93,6 +99,19 @@ export default function FileList({
     document.body.removeChild(a);
   };
 
+  const handleCopyDirectLink = (file) => {
+    const directUrl = file.id
+      ? `${window.location.origin}/api/download/${file.id}`
+      : file.url;
+
+    if (directUrl) {
+      navigator.clipboard.writeText(directUrl);
+      setCopiedId(file.id);
+      sound.playClick();
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
   return (
     <div className="clean-card" style={{ padding: '24px', marginTop: 24, backgroundColor: '#ffffff' }}>
       {/* Top Header & Search Controls */}
@@ -113,7 +132,7 @@ export default function FileList({
             alignItems: 'center',
             gap: 10,
           }}>
-            <span>Received Files</span>
+            <span>{title}</span>
             <span style={{
               backgroundColor: '#fee2e2',
               color: '#BC0202',
@@ -126,7 +145,7 @@ export default function FileList({
             </span>
           </h2>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Instant direct streaming & downloads for received files
+            {subTitle}
           </p>
         </div>
 
@@ -151,7 +170,7 @@ export default function FileList({
               }}
               className="btn-danger"
               style={{ fontSize: '0.82rem' }}
-              title="Clear all received files"
+              title="Clear all files"
             >
               <Trash2 size={14} />
               <span>Clear All</span>
@@ -265,7 +284,7 @@ export default function FileList({
       {filteredAndSortedFiles.length > 0 ? (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
           gap: 12,
         }}>
           {filteredAndSortedFiles.map((file) => {
@@ -349,6 +368,8 @@ export default function FileList({
                   paddingTop: 10,
                   borderTop: '1px solid #f1f5f9',
                   marginTop: 'auto',
+                  gap: 6,
+                  flexWrap: 'wrap',
                 }}>
                   {/* Left utility buttons */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -375,6 +396,28 @@ export default function FileList({
                       >
                         <Eye size={13} color="#BC0202" />
                         <span>Preview</span>
+                      </button>
+                    )}
+
+                    {file.id && (
+                      <button
+                        onClick={() => handleCopyDirectLink(file)}
+                        style={{
+                          backgroundColor: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          color: copiedId === file.id ? '#16a34a' : '#475569',
+                          padding: '5px 8px',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          fontSize: '0.75rem',
+                        }}
+                        title="Copy direct download link"
+                      >
+                        {copiedId === file.id ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                        <span>{copiedId === file.id ? 'Copied' : 'Link'}</span>
                       </button>
                     )}
 
@@ -440,13 +483,13 @@ export default function FileList({
             justifyContent: 'center',
             marginBottom: 14,
           }}>
-            <Layers size={30} color="#BC0202" />
+            <Cloud size={30} color="#BC0202" />
           </div>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 4 }}>
-            No Received Files Yet
+            WiFi Cloud Khali Hai (No Files Uploaded)
           </h3>
-          <p style={{ maxWidth: 420, fontSize: '0.86rem', lineHeight: 1.5 }}>
-            Pair with another phone or laptop to send and receive files instantly without internet or cables!
+          <p style={{ maxWidth: 440, fontSize: '0.86rem', lineHeight: 1.5 }}>
+            Aap direct file upload karein. File disk par save ho jayegi aur is WiFi se connected koi bhi device kabhi bhi download kar sakega (bina kisi user ke online huye)!
           </p>
         </div>
       )}
