@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <rect width="100" height="100" rx="20" fill="#ffffff" stroke="#BC0202" stroke-width="4"/>
+  <!-- WiFi signal waves in clean solid red -->
+  <path d="M22 36 A40 40 0 0 1 78 36" stroke="#BC0202" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <path d="M32 49 A25 25 0 0 1 68 49" stroke="#BC0202" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <path d="M42 62 A12 12 0 0 1 58 62" stroke="#BC0202" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <circle cx="50" cy="74" r="5" fill="#BC0202" />
+</svg>
