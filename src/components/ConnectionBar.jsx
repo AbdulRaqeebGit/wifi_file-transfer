@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Smartphone, Link, Check, Copy, QrCode, PowerOff, HelpCircle } from 'lucide-react';
+import { Smartphone, Link, Check, Copy, QrCode, PowerOff, HelpCircle, Loader2 } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function ConnectionBar({
   myCode,
   remoteCode,
   isConnected,
+  isConnecting,
   onConnect,
   onDisconnect,
   onOpenQr,
@@ -25,7 +26,7 @@ export default function ConnectionBar({
 
   const handleConnectSubmit = (e) => {
     e.preventDefault();
-    if (!targetInput.trim()) return;
+    if (!targetInput.trim() || isConnecting) return;
     sound.playClick();
     onConnect(targetInput.trim());
     setTargetInput('');
@@ -66,12 +67,12 @@ export default function ConnectionBar({
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
               <span style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: '1.15rem',
+                fontSize: '1.2rem',
                 fontWeight: 800,
                 color: '#BC0202',
                 letterSpacing: '1px',
               }}>
-                {myCode || 'Connecting...'}
+                {myCode || 'Generating...'}
               </span>
 
               <button
@@ -131,7 +132,7 @@ export default function ConnectionBar({
                   backgroundColor: '#16a34a',
                 }} />
                 <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#166534' }}>
-                  Connected: <span style={{ fontFamily: 'var(--font-mono)' }}>{remoteCode}</span>
+                  Connected with: <span style={{ fontFamily: 'var(--font-mono)' }}>{remoteCode}</span>
                 </span>
               </div>
 
@@ -155,10 +156,11 @@ export default function ConnectionBar({
             >
               <input
                 type="text"
-                placeholder="Enter 6-digit Code"
+                placeholder="Enter other's 6-digit Code"
                 value={targetInput}
                 onChange={(e) => setTargetInput(e.target.value)}
                 maxLength={10}
+                disabled={isConnecting}
                 style={{
                   backgroundColor: '#f8fafc',
                   border: '1px solid #cbd5e1',
@@ -167,18 +169,18 @@ export default function ConnectionBar({
                   fontSize: '0.86rem',
                   fontFamily: 'var(--font-mono)',
                   outline: 'none',
-                  flex: '1 1 150px',
-                  minWidth: 140,
+                  flex: '1 1 180px',
+                  minWidth: 160,
                 }}
               />
               <button
                 type="submit"
-                disabled={!targetInput.trim()}
+                disabled={!targetInput.trim() || isConnecting}
                 className="btn-primary"
                 style={{ padding: '7px 14px', fontSize: '0.82rem' }}
               >
                 <Link size={13} />
-                <span>Pair</span>
+                <span>{isConnecting ? 'Connecting...' : 'Pair & Connect'}</span>
               </button>
             </form>
           )}
@@ -197,15 +199,15 @@ export default function ConnectionBar({
               fontSize: '0.76rem',
               padding: '4px',
             }}
-            title="What if Laptop Wi-Fi is OFF?"
+            title="How to pair?"
           >
             <HelpCircle size={14} color="#BC0202" />
-            <span>Wi-Fi Guide</span>
+            <span>Pairing Help</span>
           </button>
         </div>
       </div>
 
-      {/* Wi-Fi Help Alert */}
+      {/* Pairing Help Alert */}
       {showWifiHelp && (
         <div style={{
           marginTop: 12,
@@ -217,11 +219,12 @@ export default function ConnectionBar({
           color: '#830000',
           lineHeight: 1.5,
         }}>
-          <strong>💡 Agar Laptop ka Wi-Fi band ho to kya karein?</strong>
+          <strong>💡 Code Se Kaise Connect Karein?</strong>
           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-            <li><strong>Option 1 (Mobile Hotspot):</strong> Phone ka Personal Hotspot on karein aur Laptop ko connect karein — transfer bina router ke foran hoga!</li>
-            <li><strong>Option 2 (Mobile Data / Cross Network):</strong> Agar phone mobile data (4G/5G) par ho aur laptop kisi dusre internet par ho, tab bhi direct transfer hoga!</li>
-            <li><strong>Option 3 (Laptop Hotspot):</strong> Windows Settings mein jaa kar "Mobile Hotspot" on karein aur phone connect karein.</li>
+            <li><strong>Step 1:</strong> Device A par jo 6-digit code likha hai (jaise <code>{myCode || '123456'}</code>), usay Device B ke input box mein likhein.</li>
+            <li><strong>Step 2:</strong> <strong>"Pair & Connect"</strong> par click karein (ya phone ke camera se <strong>"QR Code"</strong> scan karein).</li>
+            <li><strong>Step 3:</strong> Status green <strong>Connected</strong> ho jayega aur transfer button unlock ho jayega!</li>
+            <li>Yeh system GitHub Pages par bina kisi server ke 100% chalega!</li>
           </ul>
         </div>
       )}

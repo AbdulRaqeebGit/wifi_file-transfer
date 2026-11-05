@@ -18,6 +18,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const DB_FILE = path.join(__dirname, 'uploads_meta.json');
+const TEXT_DB_FILE = path.join(__dirname, 'texts_meta.json');
+const LINK_DB_FILE = path.join(__dirname, 'links_meta.json');
 
 // Ensure upload directory exists
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -25,34 +27,35 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 // Helpers for metadata storage
-function loadMetadata() {
+function loadJson(file, fallback = []) {
   try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, 'utf8');
-      return JSON.parse(data);
+    if (fs.existsSync(file)) {
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
     }
   } catch (err) {
-    console.error('Error reading metadata file:', err);
+    console.error(`Error reading ${file}:`, err);
   }
-  return [];
+  return fallback;
 }
 
-function saveMetadata(meta) {
+function saveJson(file, data) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(meta, null, 2), 'utf8');
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
-    console.error('Error writing metadata file:', err);
+    console.error(`Error writing ${file}:`, err);
   }
 }
 
-let filesDb = loadMetadata();
+let filesDb = loadJson(DB_FILE, []);
+let textDb = loadJson(TEXT_DB_FILE, []);
+let linkDb = loadJson(LINK_DB_FILE, []);
 
 // Validate that physical files still exist in uploads directory
 filesDb = filesDb.filter((f) => {
   const filePath = path.join(UPLOAD_DIR, f.storedName);
   return fs.existsSync(filePath);
 });
-saveMetadata(filesDb);
+saveJson(DB_FILE, filesDb);
 
 // Multer storage engine
 const storage = multer.diskStorage({
@@ -66,12 +69,12 @@ const storage = multer.diskStorage({
   },
 });
 
-// Unlimited file size, max 10 files per upload batch
+// Unlimited file size (5GB+ supported), max 10 files per upload batch
 const upload = multer({
   storage,
   limits: {
     files: 10,
-    fileSize: Infinity,
+    fileSize: Infinity, // No file size limit (Gigabytes supported)
   },
 });
 
@@ -99,10 +102,12 @@ app.get('/api/events', (req, res) => {
   res.flushHeaders?.();
 
   sseClients.push(res);
-  res.write(`event: connected\ndata: {"status":"connected"}\n\n`);
+  res.write(`event: connected\ndata: {"status":"connected","clients":${sseClients.length}}\n\n`);
+  notifyClients('clients-count', { count: sseClients.length });
 
   req.on('close', () => {
     sseClients = sseClients.filter((client) => client !== res);
+    notifyClients('clients-count', { count: sseClients.length });
   });
 });
 
@@ -149,18 +154,19 @@ app.get('/api/info', async (req, res) => {
       fileCount: filesDb.length,
       totalSize,
       maxBatchFiles: 10,
+      activeClients: sseClients.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get all files
+// Files list
 app.get('/api/files', (req, res) => {
   res.json(filesDb);
 });
 
-// Upload up to 10 files
+// High-speed disk streaming upload (up to 10 files, any size)
 app.post('/api/upload', (req, res) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) {
@@ -175,7 +181,6 @@ app.post('/api/upload', (req, res) => {
     }
 
     const newEntries = req.files.map((file) => {
-      // Fix UTF-8 filename encoding if needed
       let originalname = file.originalname;
       try {
         originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
@@ -195,7 +200,7 @@ app.post('/api/upload', (req, res) => {
     });
 
     filesDb = [...newEntries, ...filesDb];
-    saveMetadata(filesDb);
+    saveJson(DB_FILE, filesDb);
 
     notifyClients('files-updated', { action: 'upload', files: filesDb });
 
@@ -206,7 +211,7 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
-// Download single file (with Range support for streaming video/audio and resuming)
+// Single file download (with HTTP Range for IDM multi-connection & resume)
 app.get('/api/download/:id', (req, res) => {
   const file = filesDb.find((f) => f.id === req.params.id);
   if (!file) {
@@ -215,12 +220,11 @@ app.get('/api/download/:id', (req, res) => {
 
   const filePath = path.join(UPLOAD_DIR, file.storedName);
   if (!fs.existsSync(filePath)) {
-    return res.status(404).send('Physical file not found on disk');
+    return res.status(404).send('Physical file missing');
   }
 
-  // Update download counter
   file.downloads = (file.downloads || 0) + 1;
-  saveMetadata(filesDb);
+  saveJson(DB_FILE, filesDb);
   notifyClients('stats-updated', { id: file.id, downloads: file.downloads });
 
   const stat = fs.statSync(filePath);
@@ -249,28 +253,27 @@ app.get('/api/download/:id', (req, res) => {
     res.writeHead(206, head);
     stream.pipe(res);
   } else {
-    res.download(filePath, file.name);
+    res.setHeader('Content-Length', fileSize);
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    fs.createReadStream(filePath).pipe(res);
   }
 });
 
-// Preview inline (images, videos, text, pdfs)
+// Preview inline
 app.get('/api/preview/:id', (req, res) => {
   const file = filesDb.find((f) => f.id === req.params.id);
-  if (!file) {
-    return res.status(404).send('File not found');
-  }
+  if (!file) return res.status(404).send('File not found');
 
   const filePath = path.join(UPLOAD_DIR, file.storedName);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send('File missing');
-  }
+  if (!fs.existsSync(filePath)) return res.status(404).send('File missing');
 
   res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
   fs.createReadStream(filePath).pipe(res);
 });
 
-// Download all files as a ZIP stream on the fly
+// Download all files as a ZIP stream
 app.get('/api/download-all', async (req, res) => {
   if (filesDb.length === 0) {
     return res.status(400).send('No files to download');
@@ -305,26 +308,20 @@ app.get('/api/download-all', async (req, res) => {
 // Delete single file
 app.delete('/api/files/:id', (req, res) => {
   const index = filesDb.findIndex((f) => f.id === req.params.id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'File not found' });
-  }
+  if (index === -1) return res.status(404).json({ error: 'File not found' });
 
   const file = filesDb[index];
   const filePath = path.join(UPLOAD_DIR, file.storedName);
-
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
-    } catch (err) {
-      console.error('Error deleting file:', err);
-    }
+    } catch {}
   }
 
   filesDb.splice(index, 1);
-  saveMetadata(filesDb);
-
+  saveJson(DB_FILE, filesDb);
   notifyClients('files-updated', { action: 'delete', files: filesDb });
-  res.json({ success: true, message: 'File deleted successfully' });
+  res.json({ success: true });
 });
 
 // Clear all files
@@ -334,17 +331,71 @@ app.delete('/api/files', (req, res) => {
     if (fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);
-      } catch (err) {
-        console.error('Error clearing file:', err);
-      }
+      } catch {}
     }
   });
 
   filesDb = [];
-  saveMetadata(filesDb);
-
+  saveJson(DB_FILE, filesDb);
   notifyClients('files-updated', { action: 'clear', files: [] });
-  res.json({ success: true, message: 'All files cleared' });
+  res.json({ success: true });
+});
+
+// Text endpoints
+app.get('/api/text', (req, res) => {
+  res.json(textDb);
+});
+
+app.post('/api/text', (req, res) => {
+  const { text } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Empty text' });
+
+  const item = {
+    id: Date.now().toString(),
+    text: text.trim(),
+    timestamp: new Date().toISOString(),
+  };
+
+  textDb = [item, ...textDb];
+  saveJson(TEXT_DB_FILE, textDb);
+  notifyClients('text-updated', item);
+  res.json(item);
+});
+
+app.delete('/api/text', (req, res) => {
+  textDb = [];
+  saveJson(TEXT_DB_FILE, textDb);
+  notifyClients('text-cleared', {});
+  res.json({ success: true });
+});
+
+// Link endpoints
+app.get('/api/link', (req, res) => {
+  res.json(linkDb);
+});
+
+app.post('/api/link', (req, res) => {
+  const { url, title } = req.body;
+  if (!url || !url.trim()) return res.status(400).json({ error: 'Empty URL' });
+
+  const item = {
+    id: Date.now().toString(),
+    url: url.trim(),
+    title: (title || '').trim(),
+    timestamp: new Date().toISOString(),
+  };
+
+  linkDb = [item, ...linkDb];
+  saveJson(LINK_DB_FILE, linkDb);
+  notifyClients('link-updated', item);
+  res.json(item);
+});
+
+app.delete('/api/link', (req, res) => {
+  linkDb = [];
+  saveJson(LINK_DB_FILE, linkDb);
+  notifyClients('link-cleared', {});
+  res.json({ success: true });
 });
 
 // Serve static frontend build if it exists
@@ -365,6 +416,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`  WiFi / Network:   http://${net.address}:${PORT} (${net.name})`);
   });
   console.log(`  Max Batch:        10 files`);
-  console.log(`  File Size Limit:  Unlimited (Gigabytes supported)`);
+  console.log(`  File Size Limit:  Unlimited (5GB+ supported)`);
   console.log(`======================================================\n`);
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import ConnectionBar from './components/ConnectionBar';
 import Dropzone from './components/Dropzone';
@@ -8,7 +8,7 @@ import FileList from './components/FileList';
 import QrModal from './components/QrModal';
 import PreviewModal from './components/PreviewModal';
 import TransferProgressCard from './components/TransferProgressCard';
-import { FastP2PManager } from './utils/fastP2P';
+import { P2PManager } from './utils/p2p';
 import { downloadAllAsZip } from './utils/zip';
 import { sound } from './utils/sound';
 import { Radio } from 'lucide-react';
@@ -17,8 +17,9 @@ export default function App() {
   const [myCode, setMyCode] = useState('');
   const [remoteCode, setRemoteCode] = useState('');
   const [isConnected, setIsConnected] = useState(false);
-  const [activeTab, setActiveTab] = useState('files');
+  const [isConnecting, setIsConnecting] = useState(false);
 
+  const [activeTab, setActiveTab] = useState('files');
   const [files, setFiles] = useState([]);
   const [textHistory, setTextHistory] = useState([]);
   const [linkHistory, setLinkHistory] = useState([]);
@@ -30,13 +31,13 @@ export default function App() {
 
   const p2pRef = useRef(null);
 
-  // Initialize Ultra-Fast P2P Manager
+  // Initialize P2P WebRTC Manager
   useEffect(() => {
-    const p2p = new FastP2PManager({
+    const p2p = new P2PManager({
       onReady: ({ code }) => {
         setMyCode(code);
 
-        // Auto connect if opened via QR link #connect=XXXXXX
+        // If opened from phone QR code link: #connect=123456
         const hash = window.location.hash;
         const match = hash.match(/#connect=([a-zA-Z0-9]+)/);
         if (match && match[1] && match[1] !== code) {
@@ -45,13 +46,19 @@ export default function App() {
           }, 600);
         }
       },
+      onConnecting: ({ remoteCode }) => {
+        setIsConnecting(true);
+        setRemoteCode(remoteCode);
+      },
       onConnected: ({ remoteCode }) => {
         setIsConnected(true);
+        setIsConnecting(false);
         setRemoteCode(remoteCode);
         sound.playSuccess();
       },
       onDisconnected: () => {
         setIsConnected(false);
+        setIsConnecting(false);
         setRemoteCode('');
         setActiveTransfer(null);
         setIsUploading(false);
@@ -95,14 +102,15 @@ export default function App() {
         setActiveTransfer(null);
         setActiveTab('files');
       },
-      onTransferCancelled: ({ fileId, byRemote }) => {
+      onTransferCancelled: ({ byRemote }) => {
         sound.playClick();
         setActiveTransfer(null);
         setIsUploading(false);
         alert(byRemote ? 'Transfer was cancelled by the other device.' : 'Transfer cancelled.');
       },
       onError: (msg) => {
-        console.warn('P2P Error:', msg);
+        setIsConnecting(false);
+        alert('Connection error: ' + msg);
       },
     });
 
@@ -126,7 +134,11 @@ export default function App() {
   };
 
   const handleSendBatchFiles = async (filesToSend) => {
-    if (!p2pRef.current) return;
+    if (!p2pRef.current || !isConnected) {
+      alert('Please connect to a device with code first!');
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -158,31 +170,20 @@ export default function App() {
   };
 
   const handleSendText = (text) => {
-    if (p2pRef.current) {
+    if (p2pRef.current && isConnected) {
       p2pRef.current.sendText(text);
       setTextHistory((prev) => [
-        {
-          id: Date.now().toString(),
-          text,
-          isMine: true,
-          timestamp: new Date().toISOString(),
-        },
+        { id: Date.now().toString(), text, isMine: true, timestamp: new Date().toISOString() },
         ...prev,
       ]);
     }
   };
 
   const handleSendLink = (url, title) => {
-    if (p2pRef.current) {
+    if (p2pRef.current && isConnected) {
       p2pRef.current.sendLink(url, title);
       setLinkHistory((prev) => [
-        {
-          id: Date.now().toString(),
-          url,
-          title,
-          isMine: true,
-          timestamp: new Date().toISOString(),
-        },
+        { id: Date.now().toString(), url, title, isMine: true, timestamp: new Date().toISOString() },
         ...prev,
       ]);
     }
@@ -223,15 +224,21 @@ export default function App() {
             gap: 6,
             padding: '4px 12px',
             borderRadius: 6,
-            backgroundColor: '#fee2e2',
-            border: '1px solid #fca5a5',
-            color: '#BC0202',
+            backgroundColor: isConnected ? '#dcfce7' : isConnecting ? '#fef3c7' : '#fee2e2',
+            border: `1px solid ${isConnected ? '#86efac' : isConnecting ? '#fde68a' : '#fca5a5'}`,
+            color: isConnected ? '#166534' : isConnecting ? '#92400e' : '#BC0202',
             fontSize: '0.76rem',
             fontWeight: 700,
             marginBottom: 8,
           }}>
-            <Radio size={13} color="#BC0202" />
-            <span>IDM-SPEED WEBRTC DIRECT P2P TRANSFER</span>
+            <Radio size={13} color={isConnected ? '#166534' : isConnecting ? '#92400e' : '#BC0202'} />
+            <span>
+              {isConnected
+                ? `🟢 CONNECTED WITH DEVICE: ${remoteCode}`
+                : isConnecting
+                ? `🟡 CONNECTING TO ${remoteCode}...`
+                : '🔴 NOT CONNECTED • ENTER CODE BELOW TO PAIR'}
+            </span>
           </div>
 
           <h2 style={{
@@ -251,7 +258,7 @@ export default function App() {
             margin: '0 auto',
             lineHeight: 1.4,
           }}>
-            Ultra-fast speed over Same Wi-Fi, Mobile Hotspot, or Mobile Data. Ready for GitHub Pages!
+            Direct device-to-device transfer. Enter the 6-digit code or scan QR code to pair!
           </p>
         </div>
 
@@ -260,6 +267,7 @@ export default function App() {
           myCode={myCode}
           remoteCode={remoteCode}
           isConnected={isConnected}
+          isConnecting={isConnecting}
           onConnect={handleConnect}
           onDisconnect={handleDisconnect}
           onOpenQr={() => setIsQrOpen(true)}
@@ -425,10 +433,10 @@ export default function App() {
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontWeight: 800, color: '#BC0202' }}>AR | WiFi | TR</span>
-            <span>• Ultra-Fast P2P Direct WebRTC Transfer</span>
+            <span>• GitHub Pages Ready & P2P Direct WebRTC Transfer</span>
           </div>
           <div>
-            <span>Direct Device-to-Device Encrypted DataChannel</span>
+            <span>Direct Encrypted P2P DataChannel • 5GB+ Supported</span>
           </div>
         </div>
       </footer>
