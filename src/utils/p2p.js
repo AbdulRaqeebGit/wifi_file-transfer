@@ -400,6 +400,7 @@ export class P2PManager {
     }
     this.activeTransfer = null;
     this.receivingFile = null;
+    try { this.callbacks.onDisconnected(); } catch {}
   }
 
   destroy() {

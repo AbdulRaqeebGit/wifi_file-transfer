@@ -3,7 +3,15 @@ import { Send, Copy, Check, MessageSquare, Trash2 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import { formatTimeAgo } from '../utils/formatters';
 
-export default function TextShare({ isConnected, onSendText, textHistory = [], onClearHistory }) {
+export default function TextShare({
+  isConnected,
+  onSendText,
+  textHistory = [],
+  onClearHistory,
+  onDeleteText,
+  title = 'Text & Notes Transfer',
+  subTitle = 'Instantly share clipboard text, passwords, OTPs, or messages',
+}) {
   const [inputText, setInputText] = useState('');
   const [copiedId, setCopiedId] = useState(null);
 
@@ -11,7 +19,7 @@ export default function TextShare({ isConnected, onSendText, textHistory = [], o
     e?.preventDefault();
     if (!inputText.trim()) return;
     if (!isConnected) {
-      alert('Please connect to a device first to send text messages!');
+      alert('WiFi Hub is offline. Please check connection.');
       return;
     }
     sound.playClick();
@@ -26,8 +34,14 @@ export default function TextShare({ isConnected, onSendText, textHistory = [], o
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleDelete = (id) => {
+    if (!window.confirm('Delete this text message?')) return;
+    sound.playClick();
+    if (onDeleteText) onDeleteText(id);
+  };
+
   return (
-    <div className="clean-card" style={{ padding: '20px', backgroundColor: '#ffffff', marginTop: 20 }}>
+    <div className="clean-card" style={{ padding: '20px', backgroundColor: '#ffffff', marginTop: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
@@ -43,22 +57,27 @@ export default function TextShare({ isConnected, onSendText, textHistory = [], o
           </div>
           <div>
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
-              Text & Notes Transfer
+              {title}
             </h3>
             <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: 0 }}>
-              Instantly share clipboard text, passwords, OTPs, or messages
+              {subTitle}
             </p>
           </div>
         </div>
 
         {textHistory.length > 0 && (
           <button
-            onClick={onClearHistory}
+            onClick={() => {
+              if (window.confirm('Clear all text messages?')) {
+                sound.playClick();
+                onClearHistory();
+              }
+            }}
             className="btn-danger"
             style={{ padding: '4px 10px', fontSize: '0.74rem' }}
           >
             <Trash2 size={12} />
-            <span>Clear</span>
+            <span>Clear All</span>
           </button>
         )}
       </div>
@@ -69,107 +88,118 @@ export default function TextShare({ isConnected, onSendText, textHistory = [], o
           rows={2}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          placeholder={isConnected ? 'Type or paste any text or note here...' : 'Connect to a device to send text...'}
-          disabled={!isConnected}
-          style={{
-            flex: 1,
-            backgroundColor: '#f8fafc',
-            border: '1px solid #cbd5e1',
-            borderRadius: 8,
-            padding: '10px 12px',
-            fontSize: '0.88rem',
-            fontFamily: 'var(--font-sans)',
-            resize: 'vertical',
-            outline: 'none',
-          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              handleSend(e);
             }
           }}
+          placeholder="Type or paste text here (Ctrl+Enter to send)..."
+          className="clean-input"
+          style={{ flex: 1, resize: 'vertical', minHeight: 44, padding: '8px 12px' }}
         />
-
         <button
           type="submit"
-          disabled={!isConnected || !inputText.trim()}
+          disabled={!inputText.trim() || !isConnected}
           className="btn-primary"
-          style={{ padding: '10px 18px', height: 42 }}
+          style={{ padding: '10px 16px', height: 44, display: 'flex', alignItems: 'center', gap: 6 }}
         >
           <Send size={15} />
           <span>Send</span>
         </button>
       </form>
 
-      {/* History */}
-      {textHistory.length > 0 && (
-        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
-          {textHistory.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                backgroundColor: item.isMine ? '#fff5f5' : '#f8fafc',
-                border: `1px solid ${item.isMine ? '#fca5a5' : '#e2e8f0'}`,
-                borderRadius: 8,
-                padding: '10px 14px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <span style={{
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    color: item.isMine ? '#BC0202' : '#475569',
-                    backgroundColor: item.isMine ? '#fee2e2' : '#e2e8f0',
-                    padding: '1px 6px',
-                    borderRadius: 4,
+      {/* History List */}
+      <div style={{ marginTop: 16 }}>
+        {textHistory.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '24px 12px',
+            color: 'var(--text-muted)',
+            fontSize: '0.84rem',
+            backgroundColor: '#f8fafc',
+            borderRadius: 8,
+            border: '1px dashed #cbd5e1',
+          }}>
+            No text shared yet. Paste text or messages above to share!
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
+            {textHistory.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <pre style={{
+                    margin: 0,
+                    fontFamily: 'inherit',
+                    fontSize: '0.86rem',
+                    color: 'var(--text-main)',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
                   }}>
-                    {item.isMine ? 'Sent' : 'Received'}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {item.text}
+                  </pre>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
                     {formatTimeAgo(item.timestamp)}
-                  </span>
+                  </div>
                 </div>
-                <div style={{
-                  fontSize: '0.86rem',
-                  color: 'var(--text-main)',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  fontFamily: 'var(--font-sans)',
-                }}>
-                  {item.text}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <button
+                    onClick={() => handleCopy(item.id, item.text)}
+                    style={{
+                      background: 'none',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.72rem',
+                      color: '#475569',
+                    }}
+                    title="Copy text"
+                  >
+                    {copiedId === item.id ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                    <span>{copiedId === item.id ? 'Copied' : 'Copy'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    style={{
+                      background: 'none',
+                      border: '1px solid #fee2e2',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.72rem',
+                      color: '#dc2626',
+                    }}
+                    title="Delete message"
+                  >
+                    <Trash2 size={12} />
+                    <span>Delete</span>
+                  </button>
                 </div>
               </div>
-
-              <button
-                onClick={() => handleCopy(item.id, item.text)}
-                style={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  color: copiedId === item.id ? '#16a34a' : '#475569',
-                  borderRadius: 6,
-                  padding: '5px 8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: '0.74rem',
-                  fontWeight: 600,
-                  flexShrink: 0,
-                }}
-                title="Copy to clipboard"
-              >
-                {copiedId === item.id ? <Check size={13} color="#16a34a" /> : <Copy size={13} />}
-                <span>{copiedId === item.id ? 'Copied' : 'Copy'}</span>
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

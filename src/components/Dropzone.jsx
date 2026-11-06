@@ -1,10 +1,11 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { UploadCloud, File, X, CheckCircle, AlertTriangle, ArrowUp, Zap, Sparkles, HardDrive } from 'lucide-react';
+import { UploadCloud, File, X, CheckCircle, AlertTriangle, ArrowUp, Zap, Sparkles, HardDrive, Shield } from 'lucide-react';
 import { formatBytes } from '../utils/formatters';
 import { sound } from '../utils/sound';
 
 export default function Dropzone({
-  mode = 'wifi', // 'wifi' or 'p2p'
+  mode = 'wifi', // 'wifi' (Group) or 'p2p' (Private Pair)
+  scope = 'group',
   isConnected = true,
   onSendFiles,
   isUploading,
@@ -15,7 +16,7 @@ export default function Dropzone({
   const [statusMessage, setStatusMessage] = useState(null);
   const fileInputRef = useRef(null);
 
-  const MAX_FILES = 10;
+  const MAX_FILES = 50;
 
   const handleFilesAdded = useCallback((newFilesList) => {
     setStatusMessage(null);
@@ -78,9 +79,9 @@ export default function Dropzone({
       setStatusMessage({
         type: 'error',
         text:
-          mode === 'wifi'
-            ? 'WiFi Hub is offline. Please start local server with node server.js.'
-            : 'Please pair / connect to a device with code first before sending files!',
+          mode === 'p2p'
+            ? 'Pehle dusre device ka 6-digit OTP code enter karein ya QR scan karke connect karein!'
+            : 'WiFi Hub is offline. Please check your WiFi connection.',
       });
       return;
     }
@@ -93,15 +94,15 @@ export default function Dropzone({
       setStatusMessage({
         type: 'success',
         text:
-          mode === 'wifi'
-            ? '✅ File(s) successfully uploaded to WiFi Cloud! Ab sabhi devices par neeche Download ka option aa gaya hai (chahe koi user abhi online na ho).'
-            : '✅ All files sent successfully with direct P2P speed!',
+          mode === 'p2p'
+            ? '✅ File(s) successfully transferred directly to the paired device!'
+            : '✅ File(s) successfully uploaded to Group Data! Sabhi devices par foran Group section mein nazar aa rahi hain.',
       });
     } catch (err) {
       if (err.message !== 'Transfer cancelled') {
         setStatusMessage({
           type: 'error',
-          text: err.message || 'File upload failed. Please check connection.',
+          text: err.message || 'Transfer failed. Please check connection.',
         });
       }
     }
@@ -144,15 +145,15 @@ export default function Dropzone({
           height: 56,
           margin: '0 auto 12px',
           borderRadius: '50%',
-          backgroundColor: '#fee2e2',
+          backgroundColor: mode === 'p2p' ? '#fee2e2' : '#fee2e2',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          {mode === 'wifi' ? (
-            <HardDrive size={28} color="#BC0202" />
+          {mode === 'p2p' ? (
+            <Shield size={28} color="#BC0202" />
           ) : (
-            <UploadCloud size={28} color="#BC0202" />
+            <HardDrive size={28} color="#BC0202" />
           )}
         </div>
 
@@ -165,28 +166,25 @@ export default function Dropzone({
         }}>
           {isDragOver
             ? 'Release to Drop Files Here'
-            : mode === 'wifi'
-            ? 'Drop Files to Upload to Open WiFi Cloud'
-            : 'Drag & Drop files here, or Click to Browse'}
+            : mode === 'p2p'
+            ? '🔒 Drop Files for Direct Private Transfer'
+            : '👥 Drop Files to Upload to Group Data'}
         </h3>
 
         <p style={{
           color: 'var(--text-muted)',
           fontSize: '0.84rem',
-          maxWidth: 560,
+          maxWidth: 580,
           margin: '0 auto 14px',
           lineHeight: 1.4,
         }}>
-          {mode === 'wifi' ? (
+          {mode === 'p2p' ? (
             <>
-              <strong>Bina Code / Kisi User Ke Online Huye Bager:</strong> File pehle mukammal upload hogi (0-100%), phir sabhi devices par{' '}
-              <strong style={{ color: '#BC0202' }}>Download</strong> ka button aayega. Kisi link ya code bejne ki zaroorat nahi hai. Jo bhi WiFi par aayega direct access karega!
+              <strong>Direct Private Transfer:</strong> File sirf us device ko transfer hogi jiske sath aapka 6-digit OTP code pair hua hai! Kisi teesre ko nazar nahi aayegi.
             </>
           ) : (
             <>
-              Direct device-to-device streaming. 6-digit code se pair karein.{' '}
-              <strong style={{ color: '#BC0202' }}>Unlimited file size</strong>, up to{' '}
-              <strong>10 files per batch</strong>.
+              <strong>Bina Kisi Link Ya Code Ke:</strong> Same WiFi se koi bhi web khole to group section mein ye files direct nazar aayengi aur foran high-speed download kar sakega!
             </>
           )}
         </p>
@@ -200,13 +198,13 @@ export default function Dropzone({
           flexWrap: 'wrap',
         }}>
           <span className="clean-pill" style={{ color: '#475569' }}>
-            <Zap size={13} color="#BC0202" /> Ultra-Fast WiFi Speed
+            <Zap size={13} color="#BC0202" /> Ultra-Fast Direct Streaming
           </span>
           <span className="clean-pill" style={{ color: '#475569' }}>
-            <Sparkles size={13} color="#BC0202" /> Max 10 Files / Batch
+            <Sparkles size={13} color="#BC0202" /> Up to 50 Files / Batch
           </span>
           <span className="clean-pill" style={{ color: '#475569' }}>
-            <ArrowUp size={13} color="#BC0202" /> 5GB+ Unlimited Size
+            <ArrowUp size={13} color="#BC0202" /> Unlimited File Size (GBs)
           </span>
         </div>
       </div>
@@ -243,7 +241,7 @@ export default function Dropzone({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
-                Upload Queue ({selectedFiles.length} / {MAX_FILES})
+                Transfer Queue ({selectedFiles.length} / {MAX_FILES})
               </h4>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 Total: {formatBytes(totalSelectedSize)}
@@ -346,7 +344,7 @@ export default function Dropzone({
                 style={{ padding: '8px 16px', fontSize: '0.84rem' }}
               >
                 <X size={15} />
-                <span>Cancel Upload (X)</span>
+                <span>Cancel Transfer (X)</span>
               </button>
             )}
 
@@ -362,12 +360,12 @@ export default function Dropzone({
               <ArrowUp size={15} />
               <span>
                 {isUploading
-                  ? 'Uploading...'
-                  : mode === 'wifi'
-                  ? `Upload ${selectedFiles.length} File(s) to WiFi Cloud`
-                  : isConnected
-                  ? `Send ${selectedFiles.length} File(s) Direct`
-                  : 'Pair Device to Send'}
+                  ? 'Transferring at Max Speed...'
+                  : mode === 'p2p'
+                  ? isConnected
+                    ? `Send ${selectedFiles.length} File(s) Direct to Paired Device`
+                    : 'Pehle Device Pair Karein (OTP Code)'
+                  : `Upload ${selectedFiles.length} File(s) to Group Data`}
               </span>
             </button>
           </div>

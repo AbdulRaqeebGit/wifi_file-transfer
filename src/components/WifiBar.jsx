@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wifi, Copy, Check, QrCode, Users, HelpCircle, RefreshCw, Sparkles, CloudCheck, HardDrive } from 'lucide-react';
+import { Wifi, Copy, Check, QrCode, Users, HelpCircle, RefreshCw, Sparkles, HardDrive, Zap } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function WifiBar({
@@ -12,7 +12,14 @@ export default function WifiBar({
   const [copied, setCopied] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-  const networkUrl = serverInfo?.networkUrl || `http://${window.location.hostname}:5000`;
+  // Derive a clean, reliable WiFi address
+  const networkUrl =
+    serverInfo?.networkUrl ||
+    (typeof window !== 'undefined'
+      ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? `http://localhost:${serverInfo?.port || 5000}`
+        : window.location.origin
+      : 'http://localhost:5000');
 
   const handleCopyUrl = () => {
     if (networkUrl) {
@@ -62,7 +69,7 @@ export default function WifiBar({
                 padding: '2px 8px',
                 borderRadius: 4,
               }}>
-                {isServerOnline ? '🟢 Open WiFi Cloud (No Code / Offline Ready)' : '🔴 Cloud Disconnected'}
+                {isServerOnline ? '🟢 Same WiFi Hub (No Code / Direct Access)' : '🔴 Server Offline'}
               </span>
 
               {activeClients > 0 && (
@@ -77,6 +84,21 @@ export default function WifiBar({
                   <strong>{activeClients}</strong> {activeClients === 1 ? 'device online' : 'devices online'}
                 </span>
               )}
+
+              <span style={{
+                fontSize: '0.72rem',
+                color: '#166534',
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                padding: '2px 6px',
+                borderRadius: 4,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                fontWeight: 600,
+              }}>
+                <Zap size={11} color="#16a34a" /> 1MB Chunk High-Speed
+              </span>
             </div>
 
             {/* Network URL */}
@@ -121,10 +143,10 @@ export default function WifiBar({
                 }}
                 className="btn-secondary"
                 style={{ padding: '3px 8px', fontSize: '0.74rem' }}
-                title="Scan QR Code from Phone"
+                title="Scan QR Code from Mobile"
               >
                 <QrCode size={13} color="#BC0202" />
-                <span>Scan QR</span>
+                <span>Phone Connect</span>
               </button>
             </div>
           </div>
@@ -139,10 +161,10 @@ export default function WifiBar({
             }}
             className="btn-secondary"
             style={{ padding: '6px 10px', fontSize: '0.76rem' }}
-            title="Sync files"
+            title="Sync Data"
           >
             <RefreshCw size={13} />
-            <span>Sync Files</span>
+            <span>Sync</span>
           </button>
 
           <button
@@ -158,15 +180,15 @@ export default function WifiBar({
               fontSize: '0.76rem',
               padding: '6px 8px',
             }}
-            title="How Open WiFi Cloud works?"
+            title="How it works?"
           >
             <HelpCircle size={14} color="#BC0202" />
-            <span>Kaise Kaam Karta Hai?</span>
+            <span>Help Guide</span>
           </button>
         </div>
       </div>
 
-      {/* Same WiFi Guide */}
+      {/* Guide Dropdown */}
       {showHelp && (
         <div style={{
           marginTop: 12,
@@ -180,13 +202,12 @@ export default function WifiBar({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
             <Sparkles size={14} color="#BC0202" />
-            <strong>Open WiFi Cloud — Kisi Code Ya User Ke Online Huye Bager:</strong>
+            <strong>Same WiFi File Sharing — Direct & High Speed:</strong>
           </div>
           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-            <li><strong>User ka online hona zaroori nahi:</strong> Aap abhi file upload kar dein. File permanent disk par save ho jati hai. Doosra banda chahe 2 ghante baad aaye, usay file foran mil jayegi.</li>
-            <li><strong>Koi code ya link bejne ki zaroorat nahi:</strong> Jo bhi is WiFi se connect hoga aur browser mein <code>{networkUrl}</code> kholega, usay saari files seedhi nazar aayengi.</li>
-            <li><strong>Pehle Upload, Phir Download:</strong> File pehle poori upload hogi (0% to 100%). Upload complete hote hi sabhi devices par <strong>"Download"</strong> ka button unlock ho jayega!</li>
-            <li><strong>IDM & Multi-Thread Speed:</strong> HTTP Range resume support ke sath downloading full speed se hoti hai!</li>
+            <li><strong>👥 Group Data (Direct WiFi):</strong> Koi bhi same WiFi se web kholega to direct group section samne aayega. Bina kisi link ya code ke direct upload karein, sabko real-time nazar aayega!</li>
+            <li><strong>🔒 Private Data:</strong> Sirf aapke is device ke liye private room jahan aap files, texts aur links save kar sakte hain jo group mein kisi ko nahi dikhenge.</li>
+            <li><strong>🚀 High Speed:</strong> Direct streaming with 1MB highWaterMark chunk buffer and HTTP Range support. Downloads maximum WiFi speed par direct stream hongi!</li>
           </ul>
         </div>
       )}

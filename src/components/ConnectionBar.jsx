@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Smartphone, Link, Check, Copy, QrCode, PowerOff, HelpCircle, Loader2 } from 'lucide-react';
+import { Smartphone, Link, Check, Copy, QrCode, PowerOff, HelpCircle, Camera, ShieldCheck } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function ConnectionBar({
@@ -33,7 +33,7 @@ export default function ConnectionBar({
   };
 
   return (
-    <div className="clean-card" style={{ padding: '16px', backgroundColor: '#ffffff', marginBottom: 20 }}>
+    <div className="clean-card" style={{ padding: '16px', backgroundColor: '#ffffff', marginBottom: 18 }}>
       <div
         className="responsive-connection-bar"
         style={{
@@ -44,12 +44,12 @@ export default function ConnectionBar({
           gap: 12,
         }}
       >
-        {/* Left: My Device Code */}
+        {/* Left: My Device OTP Code */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <div style={{
-            width: 40,
-            height: 40,
-            borderRadius: 8,
+            width: 44,
+            height: 44,
+            borderRadius: 10,
             backgroundColor: isConnected ? '#dcfce7' : '#fee2e2',
             border: `1px solid ${isConnected ? '#86efac' : '#fca5a5'}`,
             display: 'flex',
@@ -57,18 +57,18 @@ export default function ConnectionBar({
             justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <Smartphone size={20} color={isConnected ? '#166534' : '#BC0202'} />
+            <Smartphone size={22} color={isConnected ? '#166534' : '#BC0202'} />
           </div>
 
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-              My Device Code
+            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+              Is Device Ka OTP Code
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
               <span style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: '1.2rem',
-                fontWeight: 800,
+                fontSize: '1.25rem',
+                fontWeight: 900,
                 color: '#BC0202',
                 letterSpacing: '1px',
               }}>
@@ -89,7 +89,7 @@ export default function ConnectionBar({
                   fontSize: '0.72rem',
                   color: '#475569',
                 }}
-                title="Copy code"
+                title="Copy OTP code"
               >
                 {copied ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
                 <span>{copied ? 'Copied' : 'Copy'}</span>
@@ -102,10 +102,10 @@ export default function ConnectionBar({
                 }}
                 className="btn-secondary"
                 style={{ padding: '3px 8px', fontSize: '0.72rem' }}
-                title="Scan QR Code from Phone"
+                title="Show QR Code"
               >
-                <QrCode size={12} color="#BC0202" />
-                <span>QR Code</span>
+                <QrCode size={13} color="#BC0202" />
+                <span>Show QR</span>
               </button>
             </div>
           </div>
@@ -121,18 +121,13 @@ export default function ConnectionBar({
               backgroundColor: '#dcfce7',
               border: '1px solid #86efac',
               borderRadius: 8,
-              padding: '6px 12px',
+              padding: '8px 14px',
               flexWrap: 'wrap',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: '50%',
-                  backgroundColor: '#16a34a',
-                }} />
-                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#166534' }}>
-                  Connected with: <span style={{ fontFamily: 'var(--font-mono)' }}>{remoteCode}</span>
+                <ShieldCheck size={16} color="#166534" />
+                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#166534' }}>
+                  Private Paired with: <span style={{ fontFamily: 'var(--font-mono)' }}>{remoteCode}</span>
                 </span>
               </div>
 
@@ -156,7 +151,7 @@ export default function ConnectionBar({
             >
               <input
                 type="text"
-                placeholder="Enter other's 6-digit Code"
+                placeholder="Enter Other's 6-Digit OTP"
                 value={targetInput}
                 onChange={(e) => setTargetInput(e.target.value)}
                 maxLength={10}
@@ -171,6 +166,7 @@ export default function ConnectionBar({
                   outline: 'none',
                   flex: '1 1 180px',
                   minWidth: 160,
+                  textAlign: 'center',
                 }}
               />
               <button
@@ -180,12 +176,26 @@ export default function ConnectionBar({
                 style={{ padding: '7px 14px', fontSize: '0.82rem' }}
               >
                 <Link size={13} />
-                <span>{isConnecting ? 'Connecting...' : 'Pair & Connect'}</span>
+                <span>{isConnecting ? 'Pairing...' : 'Pair & Connect'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sound.playClick();
+                  onOpenQr();
+                }}
+                className="btn-secondary"
+                style={{ padding: '7px 10px', fontSize: '0.82rem' }}
+                title="Scan QR Code with Camera"
+              >
+                <Camera size={14} color="#BC0202" />
+                <span>Scan QR</span>
               </button>
             </form>
           )}
 
-          {/* Wi-Fi Guide Toggle */}
+          {/* Pairing Help */}
           <button
             onClick={() => setShowWifiHelp(!showWifiHelp)}
             style={{
@@ -202,12 +212,12 @@ export default function ConnectionBar({
             title="How to pair?"
           >
             <HelpCircle size={14} color="#BC0202" />
-            <span>Pairing Help</span>
+            <span>Help</span>
           </button>
         </div>
       </div>
 
-      {/* Pairing Help Alert */}
+      {/* Pairing Guidance */}
       {showWifiHelp && (
         <div style={{
           marginTop: 12,
@@ -219,12 +229,11 @@ export default function ConnectionBar({
           color: '#830000',
           lineHeight: 1.5,
         }}>
-          <strong>💡 Code Se Kaise Connect Karein?</strong>
+          <strong>💡 Private OTP Code Se Kaise Connect Karein?</strong>
           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-            <li><strong>Step 1:</strong> Device A par jo 6-digit code likha hai (jaise <code>{myCode || '123456'}</code>), usay Device B ke input box mein likhein.</li>
-            <li><strong>Step 2:</strong> <strong>"Pair & Connect"</strong> par click karein (ya phone ke camera se <strong>"QR Code"</strong> scan karein).</li>
-            <li><strong>Step 3:</strong> Status green <strong>Connected</strong> ho jayega aur transfer button unlock ho jayega!</li>
-            <li>Yeh system GitHub Pages par bina kisi server ke 100% chalega!</li>
+            <li><strong>Step 1:</strong> Har device ka apna alag 6-digit OTP code hota hai (jaise upar likha hai <code>{myCode || '123456'}</code>).</li>
+            <li><strong>Step 2:</strong> Device A ka code Device B ke input box mein likh kar <strong>"Pair & Connect"</strong> dabayein, ya <strong>"Scan QR"</strong> se phone camera se scan karein.</li>
+            <li><strong>Step 3:</strong> Dono devices connect ho jayenge aur private channel ban jayega — ab jo bhi file aap bhejenge wo <strong>sirf us paired device ko jayegi</strong>, kisi teesre ko nazar nahi aayegi!</li>
           </ul>
         </div>
       )}
