@@ -16,14 +16,22 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
-const DB_FILE = path.join(__dirname, 'uploads_meta.json');
-const TEXT_DB_FILE = path.join(__dirname, 'texts_meta.json');
-const LINK_DB_FILE = path.join(__dirname, 'links_meta.json');
+
+// Vercel serverless environment detection & writable directories
+const IS_VERCEL = process.env.VERCEL === '1' || !!process.env.VERCEL_ENV || !!process.env.NOW_REGION;
+const DATA_DIR = IS_VERCEL ? os.tmpdir() : __dirname;
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const DB_FILE = path.join(DATA_DIR, 'uploads_meta.json');
+const TEXT_DB_FILE = path.join(DATA_DIR, 'texts_meta.json');
+const LINK_DB_FILE = path.join(DATA_DIR, 'links_meta.json');
 
 // Ensure upload directory exists
 if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  } catch (err) {
+    console.warn('Could not create upload directory:', err.message);
+  }
 }
 
 // Helpers for metadata storage
@@ -69,23 +77,25 @@ const storage = multer.diskStorage({
   },
 });
 
-// High-speed transfer configuration: up to 50 files per batch, unlimited size (50GB+ supported)
+// High-speed transfer configuration: up to 50 files per batch, unlimited size
 const upload = multer({
   storage,
   limits: {
     files: 50,
-    fileSize: Infinity, // No file size limit
+    fileSize: Infinity,
   },
 });
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Optimize TCP sockets for maximum LAN transfer speed (disable Nagle's algorithm)
+// Optimize TCP sockets for maximum transfer speed
 app.use((req, res, next) => {
   if (req.socket) {
-    req.socket.setNoDelay(true);
-    req.socket.setKeepAlive(true, 60000);
+    try {
+      req.socket.setNoDelay(true);
+      req.socket.setKeepAlive(true, 60000);
+    } catch {}
   }
   next();
 });
@@ -144,12 +154,19 @@ function getNetworkIps() {
   return ips;
 }
 
-// Server info & QR code
+// Server info & QR code (Works both on local network AND Vercel without :5000)
 app.get('/api/info', async (req, res) => {
   try {
     const ips = getNetworkIps();
     const primaryIp = ips.length > 0 ? ips[0].address : 'localhost';
-    const networkUrl = `http://${primaryIp}:${PORT}`;
+    
+    // Auto-detect host from request headers
+    const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+    const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+
+    const isCloudHost = IS_VERCEL || (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.startsWith('192.168.') && !host.startsWith('10.'));
+    const networkUrl = isCloudHost ? `${proto}://${host}` : `http://${primaryIp}:${PORT}`;
+
     const qrDataUrl = await QRCode.toDataURL(networkUrl, {
       margin: 2,
       scale: 8,
@@ -173,7 +190,8 @@ app.get('/api/info', async (req, res) => {
       fileCount: filesDb.length,
       totalSize,
       maxBatchFiles: 50,
-      activeClients: sseClients.length,
+      activeClients: Math.max(1, sseClients.length),
+      isCloud: isCloudHost,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -189,19 +207,18 @@ function filterByScope(list, req) {
     if (!deviceId) return [];
     return list.filter((item) => item.scope === 'private' && item.deviceId === deviceId);
   }
-  // Group scope: return all non-private items
   return list.filter((item) => item.scope !== 'private');
 }
 
 // ── Files Endpoints ──────────────────────────────────────────────────────────
 
-// Files list (Group or Private)
+// Files list (Group)
 app.get('/api/files', (req, res) => {
   const scopedFiles = filterByScope(filesDb, req);
   res.json(scopedFiles);
 });
 
-// High-speed disk streaming upload (up to 50 files, any size, Group or Private)
+// High-speed disk streaming upload (up to 50 files)
 app.post('/api/upload', (req, res) => {
   upload.array('files', 50)(req, res, (err) => {
     if (err) {
@@ -247,7 +264,7 @@ app.post('/api/upload', (req, res) => {
       action: 'upload',
       scope,
       deviceId,
-      files: scope === 'group' ? filesDb.filter((f) => f.scope !== 'private') : undefined,
+      files: filesDb.filter((f) => f.scope !== 'private'),
     });
 
     res.status(201).json({
@@ -257,7 +274,7 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
-// Single file download (Optimized 1MB chunk streaming + HTTP Range for IDM multi-connection & resume)
+// Single file download (Optimized 1MB chunk streaming + HTTP Range)
 app.get('/api/download/:id', (req, res) => {
   const file = filesDb.find((f) => f.id === req.params.id);
   if (!file) {
@@ -276,8 +293,6 @@ app.get('/api/download/:id', (req, res) => {
   const stat = fs.statSync(filePath);
   const fileSize = stat.size;
   const range = req.headers.range;
-
-  // 1MB buffer stream for maximum WiFi throughput
   const HIGH_WATER_MARK = 1024 * 1024;
 
   if (range) {
@@ -325,7 +340,7 @@ app.get('/api/preview/:id', (req, res) => {
   fs.createReadStream(filePath, { highWaterMark: 1024 * 512 }).pipe(res);
 });
 
-// Download files as a ZIP stream (Scoped to Group or Private)
+// Download files as a ZIP stream
 app.get('/api/download-all', async (req, res) => {
   const scopedFiles = filterByScope(filesDb, req);
   if (scopedFiles.length === 0) {
@@ -358,7 +373,7 @@ app.get('/api/download-all', async (req, res) => {
   await archive.finalize();
 });
 
-// Delete single file
+// Delete single file (deletes for everyone on the WiFi in real-time)
 app.delete('/api/files/:id', (req, res) => {
   const index = filesDb.findIndex((f) => f.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: 'File not found' });
@@ -378,7 +393,7 @@ app.delete('/api/files/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// Clear all files (Scoped to Group or Private)
+// Clear all files (clears for everyone on the WiFi in real-time)
 app.delete('/api/files', (req, res) => {
   const scope = req.query.scope || req.headers['x-scope'] || 'group';
   const deviceId = req.query.deviceId || req.headers['x-device-id'] || '';
@@ -511,7 +526,7 @@ if (fs.existsSync(distPath)) {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>AR | WiFi | TR — Building...</title>
+        <title>AR | WiFi | TR — Running</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
           body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0f172a; color: #fff; text-align: center; }
@@ -533,20 +548,25 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  const ips = getNetworkIps();
-  console.log(`\n======================================================`);
-  console.log(`  🚀 AR | WiFi | TR High-Speed Server is RUNNING!`);
-  console.log(`  Local:            http://localhost:${PORT}`);
-  ips.forEach((net) => {
-    console.log(`  WiFi / Network:   http://${net.address}:${PORT} (${net.name})`);
-  });
-  console.log(`  Max Batch:        50 files`);
-  console.log(`  File Size Limit:  Unlimited (Gigabytes supported)`);
-  console.log(`  Transfer Engine:  Direct Disk 1MB Stream (Ultra-Fast)`);
-  console.log(`======================================================\n`);
-});
+// Export for Vercel Serverless Function
+export default app;
 
-// Configure server keep-alive for high throughput
-server.keepAliveTimeout = 65000;
-server.headersTimeout = 66000;
+// In local mode (not Vercel), listen on PORT 5000
+if (!IS_VERCEL) {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    const ips = getNetworkIps();
+    console.log(`\n======================================================`);
+    console.log(`  🚀 AR | WiFi | TR High-Speed Server is RUNNING!`);
+    console.log(`  Local:            http://localhost:${PORT}`);
+    ips.forEach((net) => {
+      console.log(`  WiFi / Network:   http://${net.address}:${PORT} (${net.name})`);
+    });
+    console.log(`  Max Batch:        50 files`);
+    console.log(`  File Size Limit:  Unlimited (Gigabytes supported)`);
+    console.log(`  Transfer Engine:  Direct Disk 1MB Stream (Ultra-Fast)`);
+    console.log(`======================================================\n`);
+  });
+
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wifi, Copy, Check, QrCode, Users, HelpCircle, RefreshCw, Sparkles, HardDrive, Zap } from 'lucide-react';
+import { Wifi, Copy, Check, QrCode, Users, HelpCircle, RefreshCw, Sparkles, HardDrive, Zap, Globe } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function WifiBar({
@@ -12,14 +12,16 @@ export default function WifiBar({
   const [copied, setCopied] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-  // Derive a clean, reliable WiFi address
-  const networkUrl =
-    serverInfo?.networkUrl ||
-    (typeof window !== 'undefined'
-      ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? `http://localhost:${serverInfo?.port || 5000}`
-        : window.location.origin
-      : 'http://localhost:5000');
+  // Derive a clean, reliable address (NEVER append :5000 on cloud/Vercel)
+  const isCloudHost = typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1' &&
+    !/^192\.168\./.test(window.location.hostname) &&
+    !/^10\./.test(window.location.hostname);
+
+  const networkUrl = isCloudHost
+    ? (typeof window !== 'undefined' ? window.location.origin : 'https://wifi-file-transfer-kappa.vercel.app')
+    : (serverInfo?.networkUrl || `http://${window.location.hostname}:5000`);
 
   const handleCopyUrl = () => {
     if (networkUrl) {
@@ -55,7 +57,11 @@ export default function WifiBar({
             justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <HardDrive size={22} color={isServerOnline ? '#166534' : '#BC0202'} />
+            {isCloudHost ? (
+              <Globe size={22} color={isServerOnline ? '#166534' : '#BC0202'} />
+            ) : (
+              <HardDrive size={22} color={isServerOnline ? '#166534' : '#BC0202'} />
+            )}
           </div>
 
           <div style={{ minWidth: 0 }}>
@@ -69,7 +75,11 @@ export default function WifiBar({
                 padding: '2px 8px',
                 borderRadius: 4,
               }}>
-                {isServerOnline ? '🟢 Same WiFi Hub (No Code / Direct Access)' : '🔴 Server Offline'}
+                {isServerOnline
+                  ? isCloudHost
+                    ? '🟢 Cloud Storage (Live Online • No Code)'
+                    : '🟢 Same WiFi Hub (No Code / Direct Access)'
+                  : '🔴 Server Offline'}
               </span>
 
               {activeClients > 0 && (
@@ -97,7 +107,7 @@ export default function WifiBar({
                 gap: 3,
                 fontWeight: 600,
               }}>
-                <Zap size={11} color="#16a34a" /> 1MB Chunk High-Speed
+                <Zap size={11} color="#16a34a" /> {isCloudHost ? 'Fast Cloud Sync' : '1MB Chunk High-Speed'}
               </span>
             </div>
 
@@ -130,7 +140,7 @@ export default function WifiBar({
                   fontSize: '0.74rem',
                   color: '#475569',
                 }}
-                title="Copy WiFi Website URL"
+                title="Copy Website URL"
               >
                 {copied ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
                 <span>{copied ? 'Copied' : 'Copy Web Link'}</span>
@@ -202,12 +212,12 @@ export default function WifiBar({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
             <Sparkles size={14} color="#BC0202" />
-            <strong>Same WiFi File Sharing — Direct & High Speed:</strong>
+            <strong>File Sharing Guide:</strong>
           </div>
           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-            <li><strong>👥 Group Data (Direct WiFi):</strong> Koi bhi same WiFi se web kholega to direct group section samne aayega. Bina kisi link ya code ke direct upload karein, sabko real-time nazar aayega!</li>
-            <li><strong>🔒 Private Data:</strong> Sirf aapke is device ke liye private room jahan aap files, texts aur links save kar sakte hain jo group mein kisi ko nahi dikhenge.</li>
-            <li><strong>🚀 High Speed:</strong> Direct streaming with 1MB highWaterMark chunk buffer and HTTP Range support. Downloads maximum WiFi speed par direct stream hongi!</li>
+            <li><strong>👥 Group Data:</strong> Is URL par koi bhi aayega to group section open hoga. Bina kisi link ya code ke koi bhi upload kar sakta hai aur sabhi log dekh aur download kar sakte hain!</li>
+            <li><strong>🗑️ Real-time Delete:</strong> Koi bhi file, text ya link delete karega to sabke samne se usi waqt delete ho jayega.</li>
+            <li><strong>🔒 Private Pair:</strong> Har device ka alag OTP code hota hai. Code enter karke ya QR scan karke connect karein. Disconnect hote hi saari private files delete ho jati hain!</li>
           </ul>
         </div>
       )}

@@ -164,10 +164,19 @@ export default function App() {
       // Link cleared for everyone
       sse.addEventListener('link-cleared', () => setGroupLinks([]));
 
-      sse.onerror = () => setIsServerOnline(false);
+      sse.onerror = () => {
+        // SSE timed out (common on Vercel serverless) — verify via fetchServerInfo
+        fetchServerInfo();
+      };
     } catch {}
 
-    const interval = setInterval(fetchServerInfo, 10000);
+    // Active polling (every 3.5s) to guarantee real-time sync on Vercel and local
+    const interval = setInterval(() => {
+      fetchServerInfo();
+      fetchGroupFiles();
+      fetchGroupTexts();
+      fetchGroupLinks();
+    }, 3500);
 
     return () => {
       clearInterval(interval);
@@ -911,9 +920,11 @@ export default function App() {
         onClose={() => setIsQrOpen(false)}
         myCode={myCode}
         targetUrl={
-          serverInfo?.networkUrl
+          typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !/^192\.168\./.test(window.location.hostname)
+            ? `${window.location.origin}/#connect=${myCode || ''}`
+            : serverInfo?.networkUrl
             ? `${serverInfo.networkUrl}/#connect=${myCode || ''}`
-            : null
+            : `${window.location.origin}/#connect=${myCode || ''}`
         }
         onConnectCode={(targetCode) => {
           setActiveSection('p2p');
